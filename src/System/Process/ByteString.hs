@@ -9,17 +9,27 @@ import System.Exit (ExitCode)
 import System.IO
 import Utils (forkWait)
 
--- | Like 'System.Process.readProcessWithExitCode', but using 'ByteString'
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> ByteString               -- ^ standard input
     -> IO (ExitCode, ByteString, ByteString) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input = mask $ \restore -> do
+readProcessWithExitCode = readModifiedProcessWithExitCode id
+
+-- | Like 'System.Process.readProcessWithExitCode', but using 'ByteString'
+readModifiedProcessWithExitCode
+    :: (CreateProcess -> CreateProcess)
+                                -- ^ Modify CreateProcess with this
+    -> FilePath                 -- ^ command to run
+    -> [String]                 -- ^ any arguments
+    -> ByteString               -- ^ standard input
+    -> IO (ExitCode, ByteString, ByteString) -- ^ exitcode, stdout, stderr
+readModifiedProcessWithExitCode modify cmd args input = mask $ \restore -> do
+    let modify' p = modify (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
+
     (Just inh, Just outh, Just errh, pid) <-
-        createProcess (proc cmd args){ std_in  = CreatePipe,
-                                       std_out = CreatePipe,
-                                       std_err = CreatePipe }
+        createProcess (modify' (proc cmd args))
+
     flip onException
       (do hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid) $ restore $ do
