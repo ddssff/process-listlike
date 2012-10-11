@@ -16,6 +16,7 @@ import System.IO (hFlush, hClose)
 import System.Process (CreateProcess(std_in, std_out, std_err), createProcess, waitForProcess, proc,
                        StdStream(CreatePipe, Inherit), terminateProcess)
 
+-- | Like 'System.Process.readProcessWithExitCode', but using 'ByteString'
 readProcessWithExitCode
     ::FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
