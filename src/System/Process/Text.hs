@@ -26,7 +26,7 @@ readModifiedProcessWithExitCode
     -> Text                     -- ^ standard input
     -> IO (ExitCode, Text, Text) -- ^ exitcode, stdout, stderr
 readModifiedProcessWithExitCode modify cmd args input = mask $ \restore -> do
-    let modify' p = modify (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
+    let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
     (Just inh, Just outh, Just errh, pid) <-
         createProcess (modify' (proc cmd args))
