@@ -1,14 +1,20 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+-- | Variations of the readProcess and readProcessWithExitCode functions
+-- from System.Process which read and write ByteStrings and have an
+-- extra argument to modify the CreateProcess value before the process
+-- is started.
 module System.Process.ByteString.Lazy where
 
-import Control.Exception
-import qualified Control.Exception as C (evaluate)
-import Control.Monad
+import Control.Exception (evaluate, mask, onException, catch)
+import Control.Monad (void, unless)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as B
-import System.Process
-import System.Exit (ExitCode)
-import System.IO
-import Utils (forkWait)
+import Utils (forkWait, resourceVanished, mkError)
+import Prelude hiding (catch)
+import System.Exit (ExitCode(..))
+import System.IO (hFlush, hClose)
+import System.Process (CreateProcess(std_in, std_out, std_err), createProcess, waitForProcess, proc,
+                       StdStream(CreatePipe, Inherit), terminateProcess)
 
 readProcessWithExitCode
     ::FilePath                 -- ^ command to run
@@ -37,15 +43,16 @@ readModifiedProcessWithExitCode modify cmd args input = mask $ \restore -> do
 
       -- fork off a thread to start consuming stdout
       out <- B.hGetContents outh
-      waitOut <- forkWait $ void $ C.evaluate $ B.length out
+      waitOut <- forkWait $ void $ evaluate $ B.length out
 
       -- fork off a thread to start consuming stderr
       err <- B.hGetContents errh
-      waitErr <- forkWait $ void $ C.evaluate $ B.length err
+      waitErr <- forkWait $ void $ evaluate $ B.length err
 
       -- now write and flush any input
-      unless (B.null input) $ do B.hPutStr inh input; hFlush inh
-      hClose inh -- done with stdin
+      unless (B.null input) $ (do B.hPutStr inh input
+                                  hFlush inh
+                                  hClose inh) `catch` resourceVanished
 
       -- wait on the output
       waitOut
@@ -66,7 +73,6 @@ readProcess
     -> IO ByteString            -- ^ stdout
 readProcess = readModifiedProcess id
 
--- | Like 'System.Process.readProcessWithExitCode', but using 'ByteString'
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
@@ -77,27 +83,28 @@ readModifiedProcess
 readModifiedProcess modify cmd args input = mask $ \restore -> do
     let modify' p = modify (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
 
-    (Just inh, Just outh, Just errh, pid) <-
+    (Just inh, Just outh, _, pid) <-
         createProcess (modify' (proc cmd args))
 
     flip onException
-      (do hClose inh; hClose outh; hClose errh;
+      (do hClose inh; hClose outh;
             terminateProcess pid; waitForProcess pid) $ restore $ do
 
       -- fork off a thread to start consuming stdout
       out <- B.hGetContents outh
-      waitOut <- forkWait $ void $ C.evaluate $ B.length out
+      waitOut <- forkWait $ void $ evaluate $ B.length out
 
       -- now write and flush any input
-      unless (B.null input) $ do B.hPutStr inh input; hFlush inh
-      hClose inh -- done with stdin
+      unless (B.null input) $ (do B.hPutStr inh input
+                                  hFlush inh
+                                  hClose inh) `catch` resourceVanished
 
       -- wait on the output
       waitOut
 
-      hClose outh
-
       -- wait on the process
       ex <- waitForProcess pid
 
-      return out
+      case ex of
+        ExitSuccess   -> return out
+        ExitFailure r -> ioError (mkError cmd args r)
