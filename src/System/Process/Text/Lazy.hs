@@ -5,7 +5,7 @@ import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
 import System.Exit (ExitCode)
-import System.Process (CreateProcess)
+import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 
 instance Read.Strng Text where
@@ -23,8 +23,7 @@ readProcessWithExitCode = Read.readProcessWithExitCode
 readModifiedProcessWithExitCode
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
+    -> CmdSpec                  -- ^ command to run
     -> Text                     -- ^ standard input
     -> IO (ExitCode, Text, Text, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
@@ -40,8 +39,7 @@ readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually throw or const (return ())
-    -> FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
+    -> CmdSpec                  -- ^ command to run
     -> Text                     -- ^ standard input
     -> IO Text                  -- ^ stdout
 readModifiedProcess = Read.readModifiedProcess

@@ -3,7 +3,7 @@ module System.Process.ByteString.Lazy where
 
 import qualified Data.ByteString.Lazy as L
 import System.Exit (ExitCode)
-import System.Process (CreateProcess)
+import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 
 instance Read.Strng L.ByteString where
@@ -21,8 +21,7 @@ readProcessWithExitCode = Read.readProcessWithExitCode
 readModifiedProcessWithExitCode
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
+    -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
     -> IO (ExitCode, L.ByteString, L.ByteString, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
@@ -38,8 +37,7 @@ readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually throw or const (return ())
-    -> FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
+    -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
     -> IO L.ByteString          -- ^ stdout
 readModifiedProcess = Read.readModifiedProcess
