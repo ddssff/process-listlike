@@ -6,11 +6,16 @@ import qualified Data.ByteString as B
 import System.Exit (ExitCode)
 import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
+import qualified System.Process.Read2 as Read2
 
 instance Read.Strng ByteString where
   null = B.null
   hPutStr = B.hPutStr
   hGetContents = B.hGetContents
+
+instance Read2.Strng2 B.ByteString where
+  hGetNonBlocking = B.hGetNonBlocking
+  length = fromInteger . toInteger . B.length
 
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run

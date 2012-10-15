@@ -5,11 +5,16 @@ import qualified Data.ByteString.Lazy as L
 import System.Exit (ExitCode)
 import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
+import qualified System.Process.Read2 as Read2
 
 instance Read.Strng L.ByteString where
   null = L.null
   hPutStr = L.hPutStr
   hGetContents = L.hGetContents
+
+instance Read2.Strng2 L.ByteString where
+  hGetNonBlocking = L.hGetNonBlocking
+  length = L.length
 
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
