@@ -169,11 +169,13 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
     where
       readLazy inh outh =
           do -- fork off a thread to start consuming stdout
-             waitOut <- forkWait $ hGetContents outh
+             out <- hGetContents outh
+             waitOut <- forkWait $ void $ force $ out
              -- now write and flush any input
              writeInput inh
              -- wait on the output
              waitOut
+             return out
 
       readStrict inh outh =
           do out <- hGetContents outh
