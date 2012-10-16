@@ -33,18 +33,17 @@ class Strng a where
   hPutStr :: Handle -> a -> IO ()
   hGetContents :: Handle -> IO a
 
-force :: forall a. Strng a => a -> IO Int64
-force x = evaluate $ length $ x
-
--- | A version of 'System.Process.readProcessWithExitCode' with a few generalizations:
+-- | A polymorphic implementation of
+-- 'System.Process.readProcessWithExitCode' with a few
+-- generalizations:
 --
---    1. The input and outputs can be any instance of Strng.
+--    1. The input and outputs can be any instance of 'Strng'.
 --
---    2. Allows you to modify the CreateProcess record before the process starts
+--    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
---    3. Returns any ResourceVanished exception that occurs as the fourth tuple element
+--    3. Returns any 'ResourceVanished' exception that occurs as the fourth tuple element
 --
---    4. Takes a CmdSpec, so you can launch either a RawCommand or a ShellCommand.
+--    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcessWithExitCode
     :: forall a.
        Strng a =>
@@ -108,8 +107,11 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
                    return Nothing) `catch` resourceVanished (return . Just)
 
 
--- | An implementation of 'System.Process.readProcessWithExitCode' in terms
--- of 'readModifiedProcessWithExitCode'.  Fails on ResourceVanished exception.
+-- | A polymorphic implementation of
+-- 'System.Process.readProcessWithExitCode' in terms of
+-- 'readModifiedProcessWithExitCode'.  Note that if a 'ResourceVanished'
+-- exception occurs in 'readModifiedProcessWithExitCode' it will be
+-- thrown here.
 readProcessWithExitCode
     :: Strng a =>
        FilePath                 -- ^ command to run
@@ -121,7 +123,7 @@ readProcessWithExitCode cmd args input =
   maybe (return (code, out, err)) throw exn
 
 -- | Implementation of 'System.Process.readProcess' in terms of
--- 'readModifiedProcess'.  Fails on ResourceVanished exception.
+-- 'readModifiedProcess'.  May throw a 'ResourceVanished' exception.
 readProcess
     :: Strng a =>
        FilePath                 -- ^ command to run
@@ -130,15 +132,15 @@ readProcess
     -> IO a            -- ^ stdout
 readProcess cmd args = readModifiedProcess id throw (RawCommand cmd args)
 
--- | A version of 'System.Process.readProcess' with a few generalizations:
+-- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
---    1. The input and outputs can be any instance of Strng.
+--    1. The input and outputs can be any instance of 'Strng'.
 --
---    2. Allows you to modify the CreateProcess record before the process starts
+--    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
---    3. Has a handler for ResourceVanished exceptions
+--    3. Has a handler for 'ResourceVanished' exceptions
 --
---    4. Takes a CmdSpec, so you can launch either a RawCommand or a ShellCommand.
+--    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcess
     :: Strng a =>
        (CreateProcess -> CreateProcess)
@@ -193,8 +195,8 @@ forkWait a = do
 
 -- | Wrapper for a process that provides a handler for the
 -- ResourceVanished exception.  This is frequently an exception we
--- wish to ignore, because many processes will exit before they have
--- read all of their input.
+-- wish to ignore, because many processes will deliberately exit
+-- before they have read all of their input.
 resourceVanished :: (IOError -> IO a) -> IOError -> IO a
 resourceVanished epipe e = if ioe_type e == ResourceVanished then epipe e else ioError e
 
@@ -210,6 +212,9 @@ mkError (RawCommand cmd args) r =
 mkError (ShellCommand cmd) r =
     IO.mkIOError OtherError ("readProcess: " ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
+
+force :: forall a. Strng a => a -> IO Int64
+force x = evaluate $ length $ x
 
 ignore :: IOError -> IO ()
 ignore _ = return ()

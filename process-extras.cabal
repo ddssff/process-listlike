@@ -29,8 +29,6 @@ Library
     System.Process.ByteString.Lazy
     System.Process.Text
     System.Process.Text.Lazy
-
-  Other-modules:
     System.Process.Read
     System.Process.Read2
 

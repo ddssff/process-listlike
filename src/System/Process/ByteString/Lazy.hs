@@ -17,6 +17,7 @@ instance Read.Strng L.ByteString where
 instance Read2.Strng2 L.ByteString where
   hGetNonBlocking = L.hGetNonBlocking
 
+-- | 'System.Process.Read.readProcessWithExitCode' specialized for 'L.ByteString'.
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
@@ -24,6 +25,7 @@ readProcessWithExitCode
     -> IO (ExitCode, L.ByteString, L.ByteString) -- ^ exitcode, stdout, stderr
 readProcessWithExitCode = Read.readProcessWithExitCode
 
+-- | 'System.Process.Read.readModifiedProcessWithExitCode' specialized for 'L.ByteString'.
 readModifiedProcessWithExitCode
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
@@ -32,6 +34,7 @@ readModifiedProcessWithExitCode
     -> IO (ExitCode, L.ByteString, L.ByteString, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
 
+-- | 'System.Process.Read.readprocess' specialized for 'L.ByteString'.
 readProcess
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
@@ -39,6 +42,7 @@ readProcess
     -> IO L.ByteString          -- ^ stdout
 readProcess = Read.readProcess
 
+-- | 'System.Process.Read.readModifiedProcess' specialized for 'L.ByteString'.
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
@@ -48,6 +52,7 @@ readModifiedProcess
     -> IO L.ByteString          -- ^ stdout
 readModifiedProcess = Read.readModifiedProcess
 
+-- | 'System.Process.Read2.readProcessChunksWithExitCode' specialized for 'L.ByteString'.
 readProcessChunksWithExitCode
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this

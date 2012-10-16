@@ -15,6 +15,7 @@ instance Read.Strng Text where
   hPutStr = T.hPutStr
   hGetContents = T.hGetContents
 
+-- | 'System.Process.Read.readProcessWithExitCode' specialized for 'T.Text'.
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
@@ -22,6 +23,7 @@ readProcessWithExitCode
     -> IO (ExitCode, Text, Text) -- ^ exitcode, stdout, stderr
 readProcessWithExitCode = Read.readProcessWithExitCode
 
+-- | 'System.Process.Read.readModifiedProcessWithExitCode' specialized for 'T.Text'.
 readModifiedProcessWithExitCode
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
@@ -30,6 +32,7 @@ readModifiedProcessWithExitCode
     -> IO (ExitCode, Text, Text, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
 
+-- | 'System.Process.Read.readProcess' specialized for 'T.Text'.
 readProcess
     :: FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
@@ -37,6 +40,7 @@ readProcess
     -> IO Text                  -- ^ stdout
 readProcess = Read.readProcess
 
+-- | 'System.Process.Read.readModifiedProcess' specialized for 'T.Text'.
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this

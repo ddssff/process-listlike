@@ -28,6 +28,12 @@ class Strng a => Strng2 a where
 data Output a = Stdout a | Stderr a | Exception IOError deriving Show
 data Readyness = Ready | Unready | EndOfFile
 
+-- | This is a process runner which (at the cost of a busy loop) gives
+-- you the chunks of text read from stdout and stderr interleaved in
+-- the order they were written, along with any ResourceVanished
+-- exxception that might occur.  Its interface is similar to
+-- 'System.Process.Read.readModifiedProcessWithExitCode', though the
+-- implementation is somewhat alarming.
 readProcessChunksWithExitCode
     :: Strng2 a =>
        (CreateProcess -> CreateProcess)
@@ -65,7 +71,7 @@ readProcessChunksWithExitCode modify cmd input = mask $ \restore -> do
       return (ex, outs ++ map Exception exns)
 
 bufSize :: Int
-bufSize = 65536		-- maximum chunk size
+bufSize = 4096		-- maximum chunk size
 uSecs :: Int
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs :: Int
@@ -73,34 +79,35 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Read from two handles and interleave the output.
 hhGetContents :: Strng2 a => Handle -> Handle -> IO [Output a]
-hhGetContents outh errh =
-    hhGetContents' (Just outh) (Just errh) []
+hhGetContents outh errh = hhGetContents' (Just outh, Just errh, [])
 
-hhGetContents' :: Strng2 a => Maybe Handle -> Maybe Handle -> [Output a] -> IO [Output a]
-hhGetContents' Nothing Nothing outputs = return outputs
-hhGetContents' outh errh outputs =
-    do (outh', errh', outputs') <- hhGetContents'' uSecs
-       hhGetContents' outh' errh' outputs'
+hhGetContents' :: Strng2 a => (Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
+hhGetContents' (Nothing, Nothing, outputs) = return outputs
+hhGetContents' (outh, errh, outputs) =
+    hhGetContents'' uSecs >>= hhGetContents'
     where
       hhGetContents'' waitUSecs =
           do outReady <- maybe (return Unready) hReady' outh
              errReady <- maybe (return Unready) hReady' errh
              case (outReady, errReady) of
                (Unready, Unready) ->
-                   do threadDelay waitUSecs
+                   do -- Neither output handle is ready, wait a bit.
+                      -- Initial wait is 8 usecs, increasing to 0.1
+                      -- sec.
+                      threadDelay waitUSecs
                       hhGetContents'' (min maxUSecs (2 * waitUSecs))
                _ ->
-                   do (out1, errh') <- nextOut errh errReady Stderr
-                      (out2, outh') <- nextOut outh outReady Stdout
-                      return (outh', errh', outputs ++ out1 ++ out2)
+                   do -- At least one handle is ready. Do a read.
+                      (err, errh') <- nextOut errh errReady Stderr
+                      (out, outh') <- nextOut outh outReady Stdout
+                      return (outh', errh', outputs ++ err ++ out)
 
--- | Return the next output element and the updated handle
--- from a handle which is assumed ready.
+-- | Return the next output chunk and the updated handle from a handle.
 nextOut :: Strng2 a => (Maybe Handle) -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
 nextOut h Unready _ = return ([], h)	-- Handle is not ready
-nextOut (Just h) Ready constructor =	-- Perform a read
+nextOut (Just h) Ready constructor =	-- Perform a read.
     do
       a <- hGetNonBlocking h bufSize
       case length a of
@@ -111,8 +118,11 @@ nextOut (Just h) Ready constructor =	-- Perform a read
         -- Got some input
         _n -> return ([constructor a], Just h)
 
+-- | Determine whether a handle's state is Ready, Unready, or EndOfFile.
 hReady' :: Handle -> IO Readyness
-hReady' h = (hReady h >>= \ flag -> return $ if flag then Ready else Unready) `catch` (\ (e :: IOError) ->
-                                                                                  case E.ioe_type e of
-                                                                                    E.EOF -> return EndOfFile
-                                                                                    _ -> throw e)
+hReady' h =
+  readyness `catch` handleEOF
+  where
+    readyness = hReady h >>= \ flag -> return $ if flag then Ready else Unready
+    handleEOF e | E.ioe_type e == E.EOF = return EndOfFile
+    handleEOF e = throw e
