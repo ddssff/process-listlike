@@ -58,5 +58,5 @@ readProcessChunksWithExitCode
     :: (CreateProcess -> CreateProcess)
     -> CmdSpec                  -- ^ any arguments
     -> ByteString
-    -> IO (ExitCode, [Read2.Output ByteString])
+    -> IO [Read2.Output ByteString]
 readProcessChunksWithExitCode = Read2.readProcessChunksWithExitCode

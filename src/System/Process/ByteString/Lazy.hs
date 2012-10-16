@@ -58,5 +58,5 @@ readProcessChunksWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
-    -> IO (ExitCode, [Read2.Output L.ByteString]) -- ^ exitcode, outputs, exception
+    -> IO [Read2.Output L.ByteString]
 readProcessChunksWithExitCode = Read2.readProcessChunksWithExitCode

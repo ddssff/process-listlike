@@ -25,7 +25,7 @@ import System.Process.Read (Strng(null, hPutStr, length), proc', forkWait, resou
 class Strng a => Strng2 a where
   hGetNonBlocking :: Handle -> Int -> IO a
 
-data Output a = Stdout a | Stderr a | Exception IOError deriving Show
+data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving Show
 data Readyness = Ready | Unready | EndOfFile
 
 -- | This is a process runner which (at the cost of a busy loop) gives
@@ -40,7 +40,7 @@ readProcessChunksWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> a                        -- ^ standard input
-    -> IO (ExitCode, [Output a]) -- ^ exitcode, outputs, exception
+    -> IO [Output a]
 readProcessChunksWithExitCode modify cmd input = mask $ \restore -> do
     let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
@@ -68,7 +68,7 @@ readProcessChunksWithExitCode modify cmd input = mask $ \restore -> do
       -- wait on the process
       ex <- waitForProcess pid
 
-      return (ex, outs ++ map Exception exns)
+      return (outs ++ map Exception exns ++ [Result ex])
 
 bufSize :: Int
 bufSize = 4096		-- maximum chunk size
