@@ -13,21 +13,19 @@ module System.Process.Read2 (
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.Int (Int64)
 import qualified GHC.IO.Exception as E
 import Prelude hiding (catch, null, length)
 import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
 import System.Process (CreateProcess(..), StdStream(CreatePipe),
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
-import System.Process.Read (Strng(null, hPutStr), proc', forkWait, resourceVanished)
+import System.Process.Read (Strng(null, hPutStr, length), proc', forkWait, resourceVanished)
 
 -- | Class of types which can also be used by the hhGetContents function
 class Strng a => Strng2 a where
   hGetNonBlocking :: Handle -> Int -> IO a
-  length :: a -> Int64
 
-data Output a = Stdout a | Stderr a | Exception IOError
+data Output a = Stdout a | Stderr a | Exception IOError deriving Show
 data Readyness = Ready | Unready | EndOfFile
 
 readProcessChunksWithExitCode

@@ -16,7 +16,6 @@ instance Read.Strng L.ByteString where
 
 instance Read2.Strng2 L.ByteString where
   hGetNonBlocking = L.hGetNonBlocking
-  length = L.length
 
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
@@ -48,3 +47,11 @@ readModifiedProcess
     -> L.ByteString             -- ^ standard input
     -> IO L.ByteString          -- ^ stdout
 readModifiedProcess = Read.readModifiedProcess
+
+readProcessChunksWithExitCode
+    :: (CreateProcess -> CreateProcess)
+                                -- ^ Modify CreateProcess with this
+    -> CmdSpec                  -- ^ command to run
+    -> L.ByteString             -- ^ standard input
+    -> IO (ExitCode, [Read2.Output L.ByteString]) -- ^ exitcode, outputs, exception
+readProcessChunksWithExitCode = Read2.readProcessChunksWithExitCode

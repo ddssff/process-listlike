@@ -17,7 +17,6 @@ instance Read.Strng ByteString where
 
 instance Read2.Strng2 B.ByteString where
   hGetNonBlocking = B.hGetNonBlocking
-  length = fromInteger . toInteger . B.length
 
 readProcessWithExitCode
     :: FilePath                 -- ^ command to run
