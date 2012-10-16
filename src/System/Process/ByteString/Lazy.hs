@@ -8,6 +8,8 @@ import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
 instance Read.Strng L.ByteString where
+  lazy _ = True
+  length = L.length
   null = L.null
   hPutStr = L.hPutStr
   hGetContents = L.hGetContents

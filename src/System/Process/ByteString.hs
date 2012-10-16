@@ -9,6 +9,8 @@ import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
 instance Read.Strng ByteString where
+  lazy _ = False
+  length = fromInteger . toInteger . B.length
   null = B.null
   hPutStr = B.hPutStr
   hGetContents = B.hGetContents

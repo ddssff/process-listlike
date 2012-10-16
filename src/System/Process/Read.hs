@@ -15,6 +15,7 @@ module System.Process.Read (
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Int (Int64)
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (catch, null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -26,9 +27,14 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, 
 
 -- | Class of types which can be used as the input and outputs of the process functions.
 class Strng a where
+  lazy :: a -> Bool
+  length :: a -> Int64
   null :: a -> Bool
   hPutStr :: Handle -> a -> IO ()
   hGetContents :: Handle -> IO a
+
+force :: forall a. Strng a => a -> IO Int64
+force x = evaluate $ length $ x
 
 -- | A version of 'System.Process.readProcessWithExitCode' with a few generalizations:
 --
@@ -40,7 +46,8 @@ class Strng a where
 --
 --    4. Takes a CmdSpec, so you can launch either a RawCommand or a ShellCommand.
 readModifiedProcessWithExitCode
-    :: Strng a =>
+    :: forall a.
+       Strng a =>
        (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
@@ -55,21 +62,7 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
     flip onException
       (do hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid) $ restore $ do
-
-      -- fork off a thread to start consuming stdout
-      waitOut <- forkWait $ hGetContents outh
-
-      -- fork off a thread to start consuming stderr
-      waitErr <- forkWait $ hGetContents errh
-
-      -- now write and flush any input
-      exn <- if null input
-             then return Nothing
-             else (do hPutStr inh input >> hFlush inh >> hClose inh >> return Nothing) `catch` resourceVanished (return . Just)
-
-      -- wait on the output
-      out <- waitOut
-      err <- waitErr
+      (out, err, exn) <- (if lazy input then readLazy else readStrict) inh outh errh
 
       hClose outh
       hClose errh
@@ -78,6 +71,42 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
       ex <- waitForProcess pid
 
       return (ex, out, err, exn)
+    where
+      readLazy :: Handle -> Handle -> Handle -> IO (a, a, Maybe IOError)
+      readLazy inh outh errh =
+           do out :: a <- hGetContents outh
+              waitOut <- forkWait $ void $ force $ out
+              err <- hGetContents errh
+              waitErr <- forkWait $ void $ force $ out
+              -- now write and flush any input
+              exn <- writeInput inh
+              -- wait on the output
+              waitOut
+              waitErr
+              return (out, err, exn)
+
+      readStrict :: Handle -> Handle -> Handle -> IO (a, a, Maybe IOError)
+      readStrict inh outh errh =
+           do -- fork off a thread to start consuming stdout
+              waitOut <- forkWait $ hGetContents outh
+              -- fork off a thread to start consuming stderr
+              waitErr <- forkWait $ hGetContents errh
+              -- now write and flush any input
+              exn <- writeInput inh
+              -- wait on the output
+              out <- waitOut
+              err <- waitErr
+              return (out, err, exn)
+
+      writeInput :: Handle -> IO (Maybe IOError)
+      writeInput inh =
+          if null input
+          then return Nothing
+          else (do hPutStr inh input
+                   hFlush inh
+                   hClose inh
+                   return Nothing) `catch` resourceVanished (return . Just)
+
 
 -- | An implementation of 'System.Process.readProcessWithExitCode' in terms
 -- of 'readModifiedProcessWithExitCode'.  Fails on ResourceVanished exception.
@@ -127,15 +156,7 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
     flip onException
       (do hClose inh; hClose outh;
           terminateProcess pid; waitForProcess pid) $ restore $ do
-
-      -- fork off a thread to start consuming stdout
-      waitOut <- forkWait $ hGetContents outh
-
-      -- now write and flush any input
-      unless (null input) $ (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished epipe
-
-      -- wait on the output
-      out <- waitOut
+      out <- (if lazy input then readLazy else readStrict) inh outh
 
       hClose outh
 
@@ -145,6 +166,26 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
       case ex of
         ExitSuccess   -> return out
         ExitFailure r -> ioError (mkError cmd r)
+    where
+      readLazy inh outh =
+          do -- fork off a thread to start consuming stdout
+             waitOut <- forkWait $ hGetContents outh
+             -- now write and flush any input
+             writeInput inh
+             -- wait on the output
+             waitOut
+
+      readStrict inh outh =
+          do out <- hGetContents outh
+             waitOut <- forkWait $ void $ force $ out
+             writeInput inh
+             waitOut
+             return out
+
+      writeInput inh =
+         unless (null input) (do hPutStr inh input
+                                 hFlush inh
+                                 hClose inh) `catch` resourceVanished epipe
 
 forkWait :: IO a -> IO (IO a)
 forkWait a = do

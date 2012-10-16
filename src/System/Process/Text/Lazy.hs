@@ -9,6 +9,8 @@ import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 
 instance Read.Strng Text where
+  lazy _ = True
+  length = T.length
   null = T.null
   hPutStr = T.hPutStr
   hGetContents = T.hGetContents
