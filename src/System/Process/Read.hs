@@ -171,18 +171,14 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
           do -- fork off a thread to start consuming stdout
              out <- hGetContents outh
              waitOut <- forkWait $ void $ force $ out
-             -- now write and flush any input
              writeInput inh
-             -- wait on the output
              waitOut
              return out
 
       readStrict inh outh =
-          do out <- hGetContents outh
-             waitOut <- forkWait $ void $ force $ out
+          do waitOut <- forkWait $ hGetContents outh
              writeInput inh
              waitOut
-             return out
 
       writeInput inh =
          unless (null input) (do hPutStr inh input
