@@ -38,4 +38,5 @@ Library
     process,
     bytestring,
     text,
+    utf8-string,
     deepseq
