@@ -27,6 +27,7 @@ Library
   Exposed-modules:
     System.Process.ByteString
     System.Process.ByteString.Lazy
+    System.Process.String
     System.Process.Text
     System.Process.Text.Lazy
     System.Process.Read
