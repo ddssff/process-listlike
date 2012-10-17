@@ -102,7 +102,7 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
               return (out, err, exn)
 
       writeInput :: Handle -> IO (Maybe IOError)
-      writeInput inh | null input = return Nothing
+      writeInput _ | null input = return Nothing
       writeInput inh = do
           result <- (hPutStr inh input >> hFlush inh >> return Nothing) `catch` (resourceVanished (return . Just))
           hClose inh
