@@ -33,7 +33,7 @@ readModifiedProcessWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
-    -> IO (ExitCode, L.ByteString, L.ByteString, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
+    -> IO (ExitCode, L.ByteString, L.ByteString) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
 
 -- | 'System.Process.Read.readprocess' specialized for 'L.ByteString'.
@@ -48,7 +48,6 @@ readProcess = Read.readProcess
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually throw or const (return ())
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
     -> IO L.ByteString          -- ^ stdout

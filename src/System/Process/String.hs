@@ -41,10 +41,10 @@ readModifiedProcessWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> String                   -- ^ standard input
-    -> IO (ExitCode, String, String, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
+    -> IO (ExitCode, String, String) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode modify cmd input =
-    Read.readModifiedProcessWithExitCode modify cmd (T.pack input) >>= \ (code, out, err, exn) ->
-    return (code, T.unpack out, T.unpack err, exn)
+    Read.readModifiedProcessWithExitCode modify cmd (T.pack input) >>= \ (code, out, err) ->
+    return (code, T.unpack out, T.unpack err)
 
 -- | 'System.Process.Read.readProcess' specialized for 'T.Text'.
 readProcess
@@ -59,9 +59,8 @@ readProcess cmd args input =
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually throw or const (return ())
     -> CmdSpec                  -- ^ command to run
     -> String                   -- ^ standard input
     -> IO String                -- ^ stdout
-readModifiedProcess modify handle cmd input =
-    T.unpack <$> Read.readModifiedProcess modify handle cmd (T.pack input)
+readModifiedProcess modify cmd input =
+    T.unpack <$> Read.readModifiedProcess modify cmd (T.pack input)

@@ -55,7 +55,7 @@ readModifiedProcessWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> a               -- ^ standard input
-    -> IO (ExitCode, a, a, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
+    -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
     let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
@@ -65,7 +65,7 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
     flip onException
       (do hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid) $ restore $ do
-      (out, err, exn) <- (if lazy input then readLazy else readStrict) inh outh errh
+      (out, err) <- (if lazy input then readLazy else readStrict) inh outh errh
 
       hClose outh
       hClose errh
@@ -73,40 +73,38 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
       -- wait on the process
       ex <- waitForProcess pid
 
-      return (ex, out, err, exn)
+      return (ex, out, err)
     where
-      readLazy :: Handle -> Handle -> Handle -> IO (a, a, Maybe IOError)
+      readLazy :: Handle -> Handle -> Handle -> IO (a, a)
       readLazy inh outh errh =
            do out <- hGetContents outh
               waitOut <- forkWait $ void $ force $ out
               err <- hGetContents errh
               waitErr <- forkWait $ void $ force $ err
               -- now write and flush any input
-              exn <- writeInput inh
+              writeInput inh
               -- wait on the output
               waitOut
               waitErr
-              return (out, err, exn)
+              return (out, err)
 
-      readStrict :: Handle -> Handle -> Handle -> IO (a, a, Maybe IOError)
+      readStrict :: Handle -> Handle -> Handle -> IO (a, a)
       readStrict inh outh errh =
            do -- fork off a thread to start consuming stdout
               waitOut <- forkWait $ hGetContents outh
               -- fork off a thread to start consuming stderr
               waitErr <- forkWait $ hGetContents errh
               -- now write and flush any input
-              exn <- writeInput inh
+              writeInput inh
               -- wait on the output
               out <- waitOut
               err <- waitErr
-              return (out, err, exn)
+              return (out, err)
 
-      writeInput :: Handle -> IO (Maybe IOError)
-      writeInput _ | null input = return Nothing
+      writeInput :: Handle -> IO ()
       writeInput inh = do
-          result <- (hPutStr inh input >> hFlush inh >> return Nothing) `catch` (resourceVanished (return . Just))
-          hClose inh
-          return result
+        unless (null input) (hPutStr inh input >> hFlush inh)
+        hClose inh
 
 
 -- | A polymorphic implementation of
@@ -120,9 +118,7 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input =
-  readModifiedProcessWithExitCode id (RawCommand cmd args) input >>= \ (code, out, err, exn) ->
-  maybe (return (code, out, err)) throw exn
+readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode id (RawCommand cmd args) input
 
 -- | Implementation of 'System.Process.readProcess' in terms of
 -- 'readModifiedProcess'.  May throw a 'ResourceVanished' exception.
@@ -132,7 +128,7 @@ readProcess
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readProcess cmd args = readModifiedProcess id throw (RawCommand cmd args)
+readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
 
 -- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
@@ -147,11 +143,10 @@ readModifiedProcess
     :: Strng a =>
        (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually 'throw' or 'ignoreResourceVanished'
     -> CmdSpec                  -- ^ command to run
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readModifiedProcess modify epipe cmd input = mask $ \restore -> do
+readModifiedProcess modify cmd input = mask $ \restore -> do
     let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit }
 
     (Just inh, Just outh, _, pid) <-
@@ -185,7 +180,7 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
              waitOut
 
       writeInput inh = do
-         unless (null input) (do hPutStr inh input >> hFlush inh) `catch` resourceVanished epipe
+         unless (null input) (hPutStr inh input >> hFlush inh)
          hClose inh
 
 forkWait :: IO a -> IO (IO a)

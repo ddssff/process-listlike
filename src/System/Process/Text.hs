@@ -30,7 +30,7 @@ readModifiedProcessWithExitCode
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> Text                     -- ^ standard input
-    -> IO (ExitCode, Text, Text, Maybe IOError) -- ^ exitcode, stdout, stderr, exception
+    -> IO (ExitCode, Text, Text) -- ^ exitcode, stdout, stderr, exception
 readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
 
 -- | 'System.Process.Read.readProcess' specialized for 'T.Text'.
@@ -45,7 +45,6 @@ readProcess = Read.readProcess
 readModifiedProcess
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
-    -> (IOError -> IO ())       -- ^ What to on ResourceVanished exception - usually throw or const (return ())
     -> CmdSpec                  -- ^ command to run
     -> Text                     -- ^ standard input
     -> IO Text                  -- ^ stdout
