@@ -6,13 +6,11 @@ import Control.Applicative ((<$>))
 import Data.ByteString.UTF8 (toString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import System.Exit (ExitCode)
 import System.IO (hPutStr, hGetContents)
 import System.Process (CreateProcess, CmdSpec)
-import System.Process.Text
+import System.Process.Text ({- instance Read Text -})
 import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
