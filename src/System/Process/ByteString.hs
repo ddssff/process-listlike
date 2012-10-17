@@ -4,11 +4,13 @@ module System.Process.ByteString where
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import System.Exit (ExitCode)
+import System.IO (hSetBinaryMode)
 import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
 instance Read.Strng ByteString where
+  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = False
   length = fromInteger . toInteger . B.length
   null = B.null

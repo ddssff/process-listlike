@@ -3,11 +3,13 @@ module System.Process.ByteString.Lazy where
 
 import qualified Data.ByteString.Lazy as L
 import System.Exit (ExitCode)
+import System.IO (hSetBinaryMode)
 import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
 instance Read.Strng L.ByteString where
+  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = True
   length = L.length
   null = L.null

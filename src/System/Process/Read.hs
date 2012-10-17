@@ -27,6 +27,10 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, 
 
 -- | Class of types which can be used as the input and outputs of the process functions.
 class Strng a where
+  init :: a -> [Handle] -> IO ()
+  -- ^ This should call 'hSetBinaryMode' on each handle if a is a
+  -- ByteString type it doesn't attempt to decode the text using the
+  -- current locale.
   lazy :: a -> Bool
   length :: a -> Int64
   null :: a -> Bool

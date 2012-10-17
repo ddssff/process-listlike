@@ -9,6 +9,7 @@ import System.Process (CreateProcess, CmdSpec)
 import qualified System.Process.Read as Read
 
 instance Read.Strng Text where
+  init _ _ = return () 
   lazy _ = False
   length = fromInteger . toInteger . T.length
   null = T.null

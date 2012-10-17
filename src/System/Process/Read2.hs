@@ -14,12 +14,12 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import qualified GHC.IO.Exception as E
-import Prelude hiding (catch, null, length)
+import Prelude hiding (catch, null, length, init)
 import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
 import System.Process (CreateProcess(..), StdStream(CreatePipe),
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
-import System.Process.Read (Strng(null, hPutStr, length), proc', forkWait, resourceVanished)
+import System.Process.Read (Strng(init, null, hPutStr, length), proc', forkWait, resourceVanished)
 
 -- | Class of types which can also be used by the hhGetContents function
 class Strng a => Strng2 a where
@@ -46,6 +46,8 @@ readProcessChunksWithExitCode modify cmd input = mask $ \restore -> do
 
     (Just inh, Just outh, Just errh, pid) <-
         createProcess (modify' (proc' cmd))
+
+    init input [inh, outh, errh]
 
     flip onException
       (do hClose inh; hClose outh; hClose errh;

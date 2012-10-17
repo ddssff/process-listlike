@@ -8,13 +8,14 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text as T
 import System.Exit (ExitCode)
-import System.IO (hPutStr, hGetContents)
+import System.IO (hPutStr, hGetContents, hSetBinaryMode)
 import System.Process (CreateProcess, CmdSpec)
 import System.Process.Text ({- instance Read Text -})
 import qualified System.Process.Read as Read
 import qualified System.Process.Read2 as Read2
 
 instance Read.Strng String where
+  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
   lazy _ = False
   length = fromInteger . toInteger . length
   null = null
