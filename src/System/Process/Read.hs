@@ -167,7 +167,7 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
 
       case ex of
         ExitSuccess   -> return out
-        ExitFailure r -> ioError (mkError cmd r)
+        ExitFailure r -> ioError (mkError "readModifiedProcess: " cmd r)
     where
       readLazy inh outh =
           do -- fork off a thread to start consuming stdout
@@ -205,12 +205,12 @@ ignoreResourceVanished :: IOError -> IO ()
 ignoreResourceVanished = resourceVanished ignore
 
 -- | Create an exception for a process that exited abnormally.
-mkError :: CmdSpec -> Int -> IOError
-mkError (RawCommand cmd args) r =
-    IO.mkIOError OtherError ("readProcess: " ++ showCommandForUser cmd args ++ " (exit " ++ show r ++ ")")
+mkError :: String -> CmdSpec -> Int -> IOError
+mkError prefix (RawCommand cmd args) r =
+    IO.mkIOError OtherError (prefix ++ showCommandForUser cmd args ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
-mkError (ShellCommand cmd) r =
-    IO.mkIOError OtherError ("readProcess: " ++ cmd ++ " (exit " ++ show r ++ ")")
+mkError prefix (ShellCommand cmd) r =
+    IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
 force :: forall a. Strng a => a -> IO Int64
