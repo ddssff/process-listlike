@@ -1,3 +1,11 @@
+haskell-process-extras (0.3.6) unstable; urgency=low
+
+  * Call hSetBinaryMode in all the ByteString instances of Strng
+  * Fix a bug which prevented stderr from being forced
+  * Change to emulate behavior of System.Process for input handle
+
+ -- David Fox <dsf@seereason.com>  Wed, 17 Oct 2012 15:02:09 -0700
+
 haskell-process-extras (0.3.5) unstable; urgency=low
 
   * Add instances and implementations for the String type.
