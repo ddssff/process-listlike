@@ -77,10 +77,10 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
     where
       readLazy :: Handle -> Handle -> Handle -> IO (a, a, Maybe IOError)
       readLazy inh outh errh =
-           do out :: a <- hGetContents outh
+           do out <- hGetContents outh
               waitOut <- forkWait $ void $ force $ out
               err <- hGetContents errh
-              waitErr <- forkWait $ void $ force $ out
+              waitErr <- forkWait $ void $ force $ err
               -- now write and flush any input
               exn <- writeInput inh
               -- wait on the output
