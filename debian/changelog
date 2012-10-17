@@ -1,0 +1,6 @@
+haskell-process-extras (0.3.5) unstable; urgency=low
+
+  * Add instances and implementations for the String type.
+
+ -- David Fox <dsf@seereason.com>  Wed, 17 Oct 2012 09:41:03 -0700
+
