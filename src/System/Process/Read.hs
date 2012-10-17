@@ -102,13 +102,11 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
               return (out, err, exn)
 
       writeInput :: Handle -> IO (Maybe IOError)
-      writeInput inh =
-          if null input
-          then return Nothing
-          else (do hPutStr inh input
-                   hFlush inh
-                   hClose inh
-                   return Nothing) `catch` resourceVanished (return . Just)
+      writeInput inh | null input = return Nothing
+      writeInput inh = do
+          result <- (hPutStr inh input >> hFlush inh >> return Nothing) `catch` (resourceVanished (return . Just))
+          hClose inh
+          return result
 
 
 -- | A polymorphic implementation of
@@ -186,10 +184,9 @@ readModifiedProcess modify epipe cmd input = mask $ \restore -> do
              writeInput inh
              waitOut
 
-      writeInput inh =
-         unless (null input) (do hPutStr inh input
-                                 hFlush inh
-                                 hClose inh) `catch` resourceVanished epipe
+      writeInput inh = do
+         unless (null input) (do hPutStr inh input >> hFlush inh) `catch` resourceVanished epipe
+         hClose inh
 
 forkWait :: IO a -> IO (IO a)
 forkWait a = do
