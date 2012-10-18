@@ -1,10 +1,11 @@
 module System.Process.Read
     ( Chars(..)
-    , NonBlocking(..)
     , readModifiedProcessWithExitCode
     , readModifiedProcess
     , readProcessWithExitCode
     , readProcess
+    , NonBlocking(..)
+    , Output(..)
     , readProcessChunks
     ) where
 
