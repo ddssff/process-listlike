@@ -5,12 +5,12 @@ module System.Process.Read.Instances where
 import Control.Applicative ((<$>))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import Data.ByteString.UTF8 (toString)
+import Data.ByteString.UTF8 (toString, fromString)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
-import System.IO (hSetBinaryMode, hPutStr, hGetContents)
+import System.IO (hSetBinaryMode)
 import qualified System.Process.Read.Chars as Chars
 import qualified System.Process.Read.Chunks as Chunks
 
@@ -19,8 +19,8 @@ instance Chars.Chars String where
   lazy _ = False
   length = fromInteger . toInteger . length
   null = null
-  hPutStr = hPutStr
-  hGetContents = hGetContents
+  hPutStr h s = L.hPutStr h (L.fromChunks [fromString s])
+  hGetContents h = (toString . B.concat . L.toChunks) <$> L.hGetContents h
 
 instance Chunks.NonBlocking String where
   hGetNonBlocking n h = (toString . B.concat . L.toChunks) <$> L.hGetNonBlocking n h
