@@ -1,14 +1,14 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module System.Process.ByteString.Lazy where
+module System.Process.Read.ByteString.Lazy where
 
 import qualified Data.ByteString.Lazy as L
 import System.Exit (ExitCode)
 import System.IO (hSetBinaryMode)
 import System.Process (CreateProcess, CmdSpec)
-import qualified System.Process.Read as Read
-import qualified System.Process.Read2 as Read2
+import qualified System.Process.Read.Chars as Chars
+import qualified System.Process.Read.Chunks as Chunks
 
-instance Read.Strng L.ByteString where
+instance Chars.Chars L.ByteString where
   init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = True
   length = L.length
@@ -16,7 +16,7 @@ instance Read.Strng L.ByteString where
   hPutStr = L.hPutStr
   hGetContents = L.hGetContents
 
-instance Read2.Strng2 L.ByteString where
+instance Chunks.NonBlocking L.ByteString where
   hGetNonBlocking = L.hGetNonBlocking
 
 -- | 'System.Process.Read.readProcessWithExitCode' specialized for 'L.ByteString'.
@@ -25,7 +25,7 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> L.ByteString             -- ^ standard input
     -> IO (ExitCode, L.ByteString, L.ByteString) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode = Read.readProcessWithExitCode
+readProcessWithExitCode = Chars.readProcessWithExitCode
 
 -- | 'System.Process.Read.readModifiedProcessWithExitCode' specialized for 'L.ByteString'.
 readModifiedProcessWithExitCode
@@ -34,7 +34,7 @@ readModifiedProcessWithExitCode
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
     -> IO (ExitCode, L.ByteString, L.ByteString) -- ^ exitcode, stdout, stderr, exception
-readModifiedProcessWithExitCode = Read.readModifiedProcessWithExitCode
+readModifiedProcessWithExitCode = Chars.readModifiedProcessWithExitCode
 
 -- | 'System.Process.Read.readprocess' specialized for 'L.ByteString'.
 readProcess
@@ -42,7 +42,7 @@ readProcess
     -> [String]                 -- ^ any arguments
     -> L.ByteString             -- ^ standard input
     -> IO L.ByteString          -- ^ stdout
-readProcess = Read.readProcess
+readProcess = Chars.readProcess
 
 -- | 'System.Process.Read.readModifiedProcess' specialized for 'L.ByteString'.
 readModifiedProcess
@@ -51,13 +51,13 @@ readModifiedProcess
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
     -> IO L.ByteString          -- ^ stdout
-readModifiedProcess = Read.readModifiedProcess
+readModifiedProcess = Chars.readModifiedProcess
 
--- | 'System.Process.Read2.readProcessChunksWithExitCode' specialized for 'L.ByteString'.
-readProcessChunksWithExitCode
+-- | 'System.Process.Read2.readProcessChunks' specialized for 'L.ByteString'.
+readProcessChunks
     :: (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> L.ByteString             -- ^ standard input
-    -> IO [Read2.Output L.ByteString]
-readProcessChunksWithExitCode = Read2.readProcessChunksWithExitCode
+    -> IO [Chunks.Output L.ByteString]
+readProcessChunks = Chunks.readProcessChunks

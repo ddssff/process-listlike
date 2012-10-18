@@ -1,3 +1,13 @@
+haskell-process-extras (0.4) unstable; urgency=low
+
+  * Re-arrange the modules so that we can generally just import
+    System.Process.Read.
+  * Rename readProcessChunksWithExitCode -> readProcessChunks
+  * Rename class Strng -> class Chars
+  * Rename class Strng2 -> class NonBlocking
+
+ -- David Fox <dsf@seereason.com>  Thu, 18 Oct 2012 08:13:36 -0700
+
 haskell-process-extras (0.3.8) unstable; urgency=low
 
   * No, we still need to catch ResourceVanished.  Ingoring it seems to

@@ -4,10 +4,10 @@
 -- in which the chunks of text were written by the process.
 
 {-# LANGUAGE ScopedTypeVariables #-}
-module System.Process.Read2 (
-  Strng2(..),
+module System.Process.Read.Chunks (
+  NonBlocking(..),
   Output(..),
-  readProcessChunksWithExitCode,
+  readProcessChunks,
   ) where
 
 import Control.Concurrent
@@ -19,10 +19,10 @@ import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
 import System.Process (CreateProcess(..), StdStream(CreatePipe),
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
-import System.Process.Read (Strng(init, null, hPutStr, length), proc', forkWait, resourceVanished)
+import System.Process.Read.Chars (Chars(init, null, hPutStr, length), proc', forkWait, resourceVanished)
 
 -- | Class of types which can also be used by the hhGetContents function
-class Strng a => Strng2 a where
+class Chars a => NonBlocking a where
   hGetNonBlocking :: Handle -> Int -> IO a
 
 data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving Show
@@ -34,14 +34,14 @@ data Readyness = Ready | Unready | EndOfFile
 -- exxception that might occur.  Its interface is similar to
 -- 'System.Process.Read.readModifiedProcessWithExitCode', though the
 -- implementation is somewhat alarming.
-readProcessChunksWithExitCode
-    :: Strng2 a =>
+readProcessChunks
+    :: NonBlocking a =>
        (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
     -> a                        -- ^ standard input
     -> IO [Output a]
-readProcessChunksWithExitCode modify cmd input = mask $ \restore -> do
+readProcessChunks modify cmd input = mask $ \restore -> do
     let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
 
     (Just inh, Just outh, Just errh, pid) <-
@@ -80,10 +80,10 @@ maxUSecs :: Int
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Read from two handles and interleave the output.
-hhGetContents :: Strng2 a => Handle -> Handle -> IO [Output a]
+hhGetContents :: NonBlocking a => Handle -> Handle -> IO [Output a]
 hhGetContents outh errh = hhGetContents' (Just outh, Just errh, [])
 
-hhGetContents' :: Strng2 a => (Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
+hhGetContents' :: NonBlocking a => (Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
 hhGetContents' (Nothing, Nothing, outputs) = return outputs
 hhGetContents' (outh, errh, outputs) =
     hhGetContents'' uSecs >>= hhGetContents'
@@ -105,7 +105,7 @@ hhGetContents' (outh, errh, outputs) =
                       return (outh', errh', outputs ++ err ++ out)
 
 -- | Return the next output chunk and the updated handle from a handle.
-nextOut :: Strng2 a => (Maybe Handle) -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
+nextOut :: NonBlocking a => (Maybe Handle) -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
 nextOut h Unready _ = return ([], h)	-- Handle is not ready

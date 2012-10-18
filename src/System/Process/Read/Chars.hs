@@ -1,7 +1,7 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
 {-# LANGUAGE ScopedTypeVariables #-}
-module System.Process.Read (
-  Strng(..),
+module System.Process.Read.Chars (
+  Chars(..),
   readModifiedProcessWithExitCode,
   readModifiedProcess,
   readProcessWithExitCode,
@@ -26,7 +26,7 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, 
                        createProcess, waitForProcess, terminateProcess)
 
 -- | Class of types which can be used as the input and outputs of the process functions.
-class Strng a where
+class Chars a where
   init :: a -> [Handle] -> IO ()
   -- ^ This should call 'hSetBinaryMode' on each handle if a is a
   -- ByteString type it doesn't attempt to decode the text using the
@@ -41,7 +41,7 @@ class Strng a where
 -- 'System.Process.readProcessWithExitCode' with a few
 -- generalizations:
 --
---    1. The input and outputs can be any instance of 'Strng'.
+--    1. The input and outputs can be any instance of 'Chars'.
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
@@ -50,7 +50,7 @@ class Strng a where
 --    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcessWithExitCode
     :: forall a.
-       Strng a =>
+       Chars a =>
        (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
@@ -113,7 +113,7 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
 -- exception occurs in 'readModifiedProcessWithExitCode' it will be
 -- thrown here.
 readProcessWithExitCode
-    :: Strng a =>
+    :: Chars a =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
@@ -123,7 +123,7 @@ readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode id (Raw
 -- | Implementation of 'System.Process.readProcess' in terms of
 -- 'readModifiedProcess'.  May throw a 'ResourceVanished' exception.
 readProcess
-    :: Strng a =>
+    :: Chars a =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
@@ -132,7 +132,7 @@ readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
 
 -- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
---    1. The input and outputs can be any instance of 'Strng'.
+--    1. The input and outputs can be any instance of 'Chars'.
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
@@ -140,7 +140,7 @@ readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
 --
 --    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcess
-    :: Strng a =>
+    :: Chars a =>
        (CreateProcess -> CreateProcess)
                                 -- ^ Modify CreateProcess with this
     -> CmdSpec                  -- ^ command to run
@@ -209,7 +209,7 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
-force :: forall a. Strng a => a -> IO Int64
+force :: forall a. Chars a => a -> IO Int64
 force x = evaluate $ length $ x
 
 ignore :: IOError -> IO ()
