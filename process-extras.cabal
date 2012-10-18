@@ -26,6 +26,8 @@ Library
 
   Exposed-modules:
     System.Process.Read
+
+  Other-modules:
     System.Process.Read.Chars
     System.Process.Read.Chunks
     System.Process.Read.String
