@@ -20,7 +20,7 @@ source-repository head
   Location:         http://src.seereason.com/process-extras
 
 Library
-  ghc-options:      -Wall -Werror
+  ghc-options:      -Wall -Werror -O2
 
   Hs-source-dirs:   src
 
