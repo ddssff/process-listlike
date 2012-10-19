@@ -14,16 +14,15 @@ module System.Unix.Progress.LazyProcess
 import Control.Concurrent (threadDelay)
 import "mtl" Control.Monad.Trans (MonadIO(liftIO))
 import Control.Exception
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified GHC.IO.Exception as E
 import Prelude hiding (catch, init, null, length)
-import System.IO (Handle, hReady, hClose)
+import System.IO (Handle, hReady, hClose, hFlush)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (ProcessHandle, waitForProcess, terminateProcess,
                        CmdSpec, CreateProcess(..), StdStream(CreatePipe), createProcess)
 import System.Process.Read ()
-import System.Process.Read.Chars (proc', Chars(init, null, length))
+import System.Process.Read.Chars (proc', Chars(init, null, length, hPutStr), forkWait, resourceVanished)
 import System.Process.Read.Chunks (NonBlocking(hGetNonBlocking), Output(..))
 
 -- |An opaque type would give us additional type safety to ensure the
@@ -39,7 +38,7 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 lazyProcess :: (NonBlocking a, a ~ L.ByteString) =>
                (CreateProcess -> CreateProcess)
             -> CmdSpec
-            -> a
+            -> L.ByteString
             -> IO [Output a]
 lazyProcess modify cmd input = mask $ \ restore -> do
   let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
@@ -53,7 +52,15 @@ lazyProcess modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    lazyRun input (Just inh, Just outh, Just errh, pid)
+    waitOut <- forkWait $ lazyRun (Just inh, Just outh, Just errh, pid)
+
+    -- now write and flush any input
+    _exns <- if null input
+            then return []
+            else (hPutStr inh input >> hFlush inh >> hClose inh >> return []) `catch` resourceVanished (return . (: []))
+
+    -- wait on the output
+    waitOut
 
   -- liftIO (runInteractiveProcess exec args cwd env) >>= lazyRun input
 
@@ -61,14 +68,11 @@ lazyProcess modify cmd input = mask $ \ restore -> do
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
 lazyRun :: forall m a. (MonadIO m, NonBlocking a, a ~ L.ByteString) =>
-           a -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> m [Output a]
-lazyRun input (inh, outh, errh, pid) = liftIO $
-    {- hSetBinaryMode inh True >>
-       hSetBinaryMode outh True >>
-       hSetBinaryMode errh True >> -}
-    elements (input, inh, outh, errh, [])
+           (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> m [Output a]
+lazyRun (inh, outh, errh, pid) = liftIO $
+    elements (inh, outh, errh, [])
     where
-      elements :: (a, Maybe Handle, Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
+      elements :: (Maybe Handle, Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
@@ -76,18 +80,18 @@ lazyRun input (inh, outh, errh, pid) = liftIO $
       -- and there is nowhere else where a Result is added.  However,
       -- the process doing the traversing may die before that end is
       -- reached.
-      elements (_, _, Nothing, Nothing, elems) =
+      elements (_, Nothing, Nothing, elems) =
           do result <- waitForProcess pid
              -- Note that there is no need to insert the result code
              -- at the end of the list.
              return $ Result result : elems
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements tl@(_, _, _, _, []) = ready uSecs tl >>= elements
+      elements tl@(_, _, _, []) = ready uSecs tl >>= elements
       -- Add some output to the result value
-      elements (input, inh, outh, errh, elems) =
+      elements (inh, outh, errh, elems) =
           do
-            etc <- unsafeInterleaveIO (elements (input, inh, outh, errh, []))
+            etc <- unsafeInterleaveIO (elements (inh, outh, errh, []))
             return $ elems ++ etc
 
 -- A quick fix for the issue where hWaitForInput has actually started
@@ -107,41 +111,24 @@ hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) 
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
 ready :: (NonBlocking a, a ~ L.ByteString) =>
-         Int -> (a, Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
-      -> IO (a, Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
-ready waitUSecs (input, inh, outh, errh, elems) =
+         Int -> (Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
+      -> IO (Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
+ready waitUSecs (inh, outh, errh, elems) =
     do
       outReady <- maybe (return Unready) hReady' outh
       errReady <- maybe (return Unready) hReady' errh
-      case (L.toChunks input, inh, outReady, errReady) of
-        -- Input exhausted, close the input handle.
-        ([], Just handle, Unready, Unready) ->
-            do hClose handle
-               ready waitUSecs (input, Nothing, outh, errh, elems)
+      case (inh, outReady, errReady) of
         -- Input handle closed and there are no ready output handles,
         -- wait a bit
-        ([], Nothing, Unready, Unready) ->
+        (Nothing, Unready, Unready) ->
             do threadDelay waitUSecs
                --ePut0 ("Slept " ++ show uSecs ++ " microseconds\n")
-               ready (min maxUSecs (2 * waitUSecs)) (input, inh, outh, errh, elems)
-        -- Input is available and there are no ready output handles
-        (input : etc, Just handle, Unready, Unready)
-            -- Discard a zero byte input
-            | null input -> ready waitUSecs (L.fromChunks etc, inh, outh, errh, elems)
-            -- Send some input to the process
-            | True ->
-                do input' <- B.hPutNonBlocking handle input
-                   case B.null input' of
-                     -- Input buffer is full too, sleep.
-                     True -> do threadDelay uSecs
-                                ready (min maxUSecs (2 * waitUSecs)) (L.fromChunks (input : etc), inh, outh, errh, elems)
-                     -- We wrote some input, discard it and continue
-                     False -> return (L.fromChunks (input' : etc), Just handle, outh, errh, elems)
+               ready (min maxUSecs (2 * waitUSecs)) (inh, outh, errh, elems)
         -- One or both output handles are ready, try to read from them
         _ ->
             do (out1, errh') <- nextOut errh errReady Stderr
                (out2, outh') <- nextOut outh outReady Stdout
-               return (input, inh, outh', errh', elems ++ out1 ++ out2)
+               return (inh, outh', errh', elems ++ out1 ++ out2)
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
