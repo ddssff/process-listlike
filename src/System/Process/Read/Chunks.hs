@@ -8,14 +8,35 @@ module System.Process.Read.Chunks (
   NonBlocking(..),
   Output(..),
   readProcessChunks,
+  isResult,
+  isStdout,
+  isStderr,
+  isException,
+  discardStdout,
+  discardStderr,
+  discardExceptions,
+  discardResult,
+  keepStdout,
+  keepStderr,
+  keepExceptions,
+  keepResult,
+  mergeToStdout,
+  mergeToStderr,
+  sendOutputs,
+  foldChunks,
+  foldChunks',
+  dots
   ) where
 
+import Control.Applicative (Applicative, (<$>))
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Int (Int64)
+import Data.Monoid (Monoid, mconcat)
 import qualified GHC.IO.Exception as E
-import Prelude hiding (catch, null, length, init)
-import System.Exit (ExitCode)
+import Prelude hiding (catch, null, length, init, rem)
+import System.Exit (ExitCode, exitWith)
 import System.IO hiding (hPutStr, hGetContents)
 import System.Process (CreateProcess(..), StdStream(CreatePipe),
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
@@ -70,7 +91,7 @@ readProcessChunks modify cmd input = mask $ \restore -> do
       -- wait on the process
       ex <- waitForProcess pid
 
-      return (outs ++ map Exception exns ++ [Result ex])
+      return (outs {- ++ map Exception exns ++ [Result ex] -})
 
 bufSize :: Int
 bufSize = 4096		-- maximum chunk size
@@ -128,3 +149,100 @@ hReady' h =
     readyness = hReady h >>= \ flag -> return $ if flag then Ready else Unready
     handleEOF e | E.ioe_type e == E.EOF = return EndOfFile
     handleEOF e = throw e
+
+discardStdout :: [Output a] -> [Output a]
+discardStdout = filter (not . isStdout)
+discardStderr :: [Output a] -> [Output a]
+discardStderr = filter (not . isStderr)
+discardExceptions :: [Output a] -> [Output a]
+discardExceptions = filter (not . isException)
+discardResult :: [Output a] -> [Output a]
+discardResult = filter (not . isResult)
+
+mergeToStdout :: [Output a] -> [Output a]
+mergeToStdout = map toStdout
+mergeToStderr :: [Output a] -> [Output a]
+mergeToStderr = map toStderr
+
+toStdout :: Output a -> Output a
+toStdout (Stderr s) = Stdout s
+toStdout x = x
+toStderr :: Output a -> Output a
+toStderr (Stdout s) = Stderr s
+toStderr x = x
+
+keepStdout :: [Output a] -> [Output a]
+keepStdout = filter isStdout
+keepStderr :: [Output a] -> [Output a]
+keepStderr = filter isStderr
+keepExceptions :: [Output a] -> [Output a]
+keepExceptions = filter isException
+keepResult :: [Output a] -> [Output a]
+keepResult = filter isResult
+
+isStdout :: Output a -> Bool
+isStdout (Stdout _) = True
+isStdout _ = False
+isStderr :: Output a -> Bool
+isStderr (Stderr _) = True
+isStderr _ = False
+isException :: Output a -> Bool
+isException (Exception _) = True
+isException _ = False
+isResult :: Output a -> Bool
+isResult (Result _) = True
+isResult _ = False
+
+foldChunks :: (Monad m, Applicative m, Chars a) =>
+              (ExitCode -> m b)
+           -> (a -> m b)
+           -> (a -> m b)
+           -> (IOError -> m b)
+           -> [Output a]
+           -> m [b]
+foldChunks codefn outfn errfn exnfn xs =
+    mapM f xs
+    where
+      f (Result code) = codefn code
+      f (Stdout out) = outfn out
+      f (Stderr err) = errfn err
+      f (Exception exn) = exnfn exn
+
+foldChunks' :: (Monoid b, Monad m, Applicative m, Chars a) =>
+              (ExitCode -> m b)
+            -> (a -> m b)
+            -> (a -> m b)
+            -> (IOError -> m b)
+            -> [Output a]
+            -> m b
+foldChunks' codefn outfn errfn exnfn xs =
+    mconcat <$> foldChunks codefn outfn errfn exnfn xs
+
+sendOutputs :: NonBlocking a => [Output a] -> IO ()
+sendOutputs = foldChunks' exitWith (hPutStr stdout) (hPutStr stderr) throw
+
+dots :: forall a. NonBlocking a => Int -> (Int -> IO ()) -> [Output a] -> IO [Output a]
+dots charsPerDot put outputs =
+    put 1 >> dots' 0 outputs >> return outputs
+    where
+      dots' :: NonBlocking a => Int -> [Output a] -> IO ()
+      dots' _ [] = return ()
+      dots' rem (x : more) =
+          let count = case x of
+                        Stdout s -> length s
+                        Stderr s -> length s
+                        _ -> 0
+              (count', rem') = divMod (rem + fromInteger (toInteger count)) charsPerDot in
+          put count' >> dots' rem' more 
+
+mapMaybeStdout :: (a -> Maybe (Output a)) -> [Output a] -> [Output a]
+mapMaybeStdout f (Stdout s : more) = maybe [] (: []) ( f s) ++ mapMaybeStdout f more
+mapMaybeStdout f (x : more) = x : mapMaybeStdout f more
+
+stdoutText :: Output a -> Maybe a
+stdoutText (Stdout x) = Just x
+stdoutText _ = Nothing
+
+stderrText :: Output a -> Maybe a
+stderrText (Stderr x) = Just x
+stderrText _ = Nothing
