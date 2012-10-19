@@ -29,8 +29,8 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, 
 class Chars a where
   init :: a -> [Handle] -> IO ()
   -- ^ This should call 'hSetBinaryMode' on each handle if a is a
-  -- ByteString type it doesn't attempt to decode the text using the
-  -- current locale.
+  -- ByteString type, so that it doesn't attempt to decode the text
+  -- using the current locale.
   lazy :: a -> Bool
   length :: a -> Int64
   null :: a -> Bool
@@ -45,9 +45,7 @@ class Chars a where
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
---    3. Returns any 'ResourceVanished' exception that occurs as the fourth tuple element
---
---    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
+--    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcessWithExitCode
     :: forall a.
        Chars a =>
@@ -109,9 +107,7 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
--- 'readModifiedProcessWithExitCode'.  Note that if a 'ResourceVanished'
--- exception occurs in 'readModifiedProcessWithExitCode' it will be
--- thrown here.
+-- 'readModifiedProcessWithExitCode'.
 readProcessWithExitCode
     :: Chars a =>
        FilePath                 -- ^ command to run
@@ -121,7 +117,7 @@ readProcessWithExitCode
 readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode id (RawCommand cmd args) input
 
 -- | Implementation of 'System.Process.readProcess' in terms of
--- 'readModifiedProcess'.  May throw a 'ResourceVanished' exception.
+-- 'readModifiedProcess'.
 readProcess
     :: Chars a =>
        FilePath                 -- ^ command to run
@@ -136,9 +132,7 @@ readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
---    3. Has a handler for 'ResourceVanished' exceptions
---
---    4. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
+--    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcess
     :: Chars a =>
        (CreateProcess -> CreateProcess)
