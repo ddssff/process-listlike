@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module System.Process.Read.Instances where
 
@@ -10,13 +10,14 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
+import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
 import qualified System.Process.Read.Chars as Chars
 import qualified System.Process.Read.Chunks as Chunks
 
 instance Chars.Chars String where
   init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
-  lazy _ = False
+  lazy _ = True
   length = fromInteger . toInteger . length
   null = null
   hPutStr h s = L.hPutStr h (L.fromChunks [fromString s])
@@ -48,7 +49,7 @@ instance Chunks.NonBlocking L.ByteString where
   hGetNonBlocking = L.hGetNonBlocking
 
 instance Chars.Chars T.Text where
-  init _ _ = return () 
+  init _ _ = return ()
   lazy _ = False
   length = fromInteger . toInteger . T.length
   null = T.null

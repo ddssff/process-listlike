@@ -104,7 +104,6 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
         unless (null input) (hPutStr inh input >> hFlush inh) `catch` resourceVanished (\ _ -> return ())
         hClose inh
 
-
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
 -- 'readModifiedProcessWithExitCode'.
