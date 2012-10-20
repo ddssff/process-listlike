@@ -129,7 +129,7 @@ ready waitUSecs (outh, errh) =
 -- or we reach end of file an empty list of outputs is returned.
 nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
-nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
+nextOut _ Closed _ = return ([], Nothing)	-- Handle is closed
 nextOut h Unready _ = return ([], h)		-- Handle is not ready
 nextOut (Just h) Ready constructor =	-- Perform a read
     do
@@ -142,11 +142,15 @@ nextOut (Just h) Ready constructor =	-- Perform a read
         -- Got some output
         _n -> return ([constructor a], Just h)
 
-data Readyness = Ready | Unready | EndOfFile
+data Readyness = Ready | Unready | Closed
 
 hReady' :: Maybe Handle -> IO Readyness
-hReady' Nothing = return Unready
-hReady' (Just h) = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` endOfFile (\ _ -> return EndOfFile)
+hReady' Nothing = return Closed
+hReady' (Just h) =
+    hIsClosed h >>= checkReady
+    where
+      checkReady True = return Closed
+      checkReady False = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` endOfFile (\ _ -> return Closed)
 
 endOfFile :: (IOError -> IO a) -> IOError -> IO a
 endOfFile eeof e = if E.ioe_type e == E.EOF then eeof e else ioError e
