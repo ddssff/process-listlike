@@ -1,5 +1,5 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.Chars (
   Chars(..),
   readModifiedProcessWithExitCode,
@@ -15,7 +15,6 @@ module System.Process.Read.Chars (
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.Int (Int64)
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (catch, null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -26,13 +25,14 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, 
                        createProcess, waitForProcess, terminateProcess)
 
 -- | Class of types which can be used as the input and outputs of the process functions.
-class Chars a where
+class Integral (LengthType a) => Chars a where
+  type LengthType a
   init :: a -> [Handle] -> IO ()
   -- ^ This should call 'hSetBinaryMode' on each handle if a is a
   -- ByteString type, so that it doesn't attempt to decode the text
   -- using the current locale.
   lazy :: a -> Bool
-  length :: a -> Int64
+  length :: a -> LengthType a
   null :: a -> Bool
   hPutStr :: Handle -> a -> IO ()
   hGetContents :: Handle -> IO a
@@ -202,7 +202,7 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
-force :: forall a. Chars a => a -> IO Int64
+force :: forall a. Chars a => a -> IO (LengthType a)
 force x = evaluate $ length $ x
 
 ignore :: IOError -> IO ()
