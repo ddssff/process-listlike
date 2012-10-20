@@ -22,8 +22,6 @@ source-repository head
 Library
   ghc-options:      -Wall -Werror -O2 -threaded
 
-  Hs-source-dirs:   src
-
   Exposed-modules:
     System.Process.Read
 
