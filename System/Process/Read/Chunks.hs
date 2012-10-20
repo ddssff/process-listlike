@@ -66,7 +66,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ elements pid (Just inh, Just outh, Just errh, [])
+    waitOut <- forkWait $ elements pid (Just outh, Just errh, [])
 
     -- now write and flush any input
     unless (null input) (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished (\ _e -> return ())
@@ -76,8 +76,8 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> (Maybe Handle, Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
-elements pid (_, Nothing, Nothing, elems) =
+elements :: NonBlocking a => ProcessHandle -> (Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
+elements pid (Nothing, Nothing, elems) =
     -- EOF on both output descriptors, get exit code.  It can be
     -- argued that the result will always contain exactly one exit
     -- code if traversed to its end, because the only case of
@@ -89,13 +89,13 @@ elements pid (_, Nothing, Nothing, elems) =
        -- Note that there is no need to insert the result code
        -- at the end of the list.
        return $ Result result : elems
-elements pid tl@(_, _, _, []) =
+elements pid (outh, errh, []) =
     -- The available output has been processed, send input and read
     -- from the ready handles
-    ready uSecs tl >>= elements pid
-elements pid (inh, outh, errh, elems) =
+    ready uSecs (outh, errh) >>= elements pid
+elements pid (outh, errh, elems) =
     -- Add some output to the result value
-    do etc <- unsafeInterleaveIO (elements pid (inh, outh, errh, []))
+    do etc <- unsafeInterleaveIO (elements pid (outh, errh, []))
        return $ elems ++ etc
 
 -- | Wait until at least one handle is ready and then write input or
@@ -105,24 +105,24 @@ elements pid (inh, outh, errh, elems) =
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
 ready :: (NonBlocking a) =>
-         Int -> (Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
-      -> IO (Maybe Handle, Maybe Handle, Maybe Handle, [Output a])
-ready waitUSecs (inh, outh, errh, elems) =
+         Int -> (Maybe Handle, Maybe Handle)
+      -> IO (Maybe Handle, Maybe Handle, [Output a])
+ready waitUSecs (outh, errh) =
     do
       outReady <- hReady' outh
       errReady <- hReady' errh
-      case (inh, outReady, errReady) of
+      case (outReady, errReady) of
         -- Input handle closed and there are no ready output handles,
         -- wait a bit
-        (Nothing, Unready, Unready) ->
+        (Unready, Unready) ->
             do threadDelay waitUSecs
                --ePut0 ("Slept " ++ show uSecs ++ " microseconds\n")
-               ready (min maxUSecs (2 * waitUSecs)) (inh, outh, errh, elems)
+               ready (min maxUSecs (2 * waitUSecs)) (outh, errh)
         -- One or both output handles are ready, try to read from them
         _ ->
             do (out1, errh') <- nextOut errh errReady Stderr
                (out2, outh') <- nextOut outh outReady Stdout
-               return (inh, outh', errh', elems ++ out1 ++ out2)
+               return (outh', errh', out1 ++ out2)
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
