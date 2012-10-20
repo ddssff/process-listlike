@@ -79,10 +79,10 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 -- the stdout and stderr of the process.
 elements :: NonBlocking a => ProcessHandle -> (Handle, Handle) -> IO [Output a]
 elements pid (outh, errh) =
-    do outReady <- hReady' outh
-       errReady <- hReady' errh
-       case (outReady, errReady) of
-         (Closed, Closed) ->
+    do outClosed <- hIsClosed outh
+       errClosed <- hIsClosed errh
+       case (outClosed, errClosed) of
+         (True, True) ->
            -- EOF on both output descriptors, get exit code.  It can be
            -- argued that the result will always contain exactly one exit
            -- code if traversed to its end, because the only case of
@@ -104,10 +104,14 @@ data Readyness = Ready | Unready | Closed
 
 hReady' :: Handle -> IO Readyness
 hReady' h =
+    -- This check is necessary because if we run hReady on a closed
+    -- handle it will keep giving us EndOfFile exceptions.
     hIsClosed h >>= checkReady
     where
       checkReady True = return Closed
-      checkReady False = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` endOfFile (\ _ -> return Closed)
+      checkReady False =
+          (hReady h >>= (\ flag -> return (if flag then Ready else Unready)))
+            `catch` endOfFile (\ _ -> return Closed)
 
 -- | Wait until at least one handle is ready and then read output.  If
 -- none of the output descriptors are ready for reading the function
