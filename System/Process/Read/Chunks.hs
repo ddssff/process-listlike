@@ -11,6 +11,7 @@ module System.Process.Read.Chunks (
   readProcessChunks
   ) where
 
+import Control.Applicative ((<$>))
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
@@ -66,7 +67,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ elements pid (Just outh, Just errh, [])
+    waitOut <- forkWait $ elements pid (Just outh, Just errh)
 
     -- now write and flush any input
     unless (null input) (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished (\ _e -> return ())
@@ -76,8 +77,8 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> (Maybe Handle, Maybe Handle, [Output a]) -> IO [Output a]
-elements pid (Nothing, Nothing, elems) =
+elements :: NonBlocking a => ProcessHandle -> (Maybe Handle, Maybe Handle) -> IO [Output a]
+elements pid (Nothing, Nothing) =
     -- EOF on both output descriptors, get exit code.  It can be
     -- argued that the result will always contain exactly one exit
     -- code if traversed to its end, because the only case of
@@ -88,22 +89,18 @@ elements pid (Nothing, Nothing, elems) =
     do result <- waitForProcess pid
        -- Note that there is no need to insert the result code
        -- at the end of the list.
-       return $ Result result : elems
-elements pid (outh, errh, []) =
+       return [Result result]
+elements pid (outh, errh) =
     -- The available output has been processed, send input and read
     -- from the ready handles
-    ready uSecs (outh, errh) >>= elements pid
-elements pid (outh, errh, elems) =
-    -- Add some output to the result value
-    do etc <- unsafeInterleaveIO (elements pid (outh, errh, []))
-       return $ elems ++ etc
+    do (outh', errh', elems') <- ready uSecs (outh, errh)
+       case elems' of
+         [] -> return []
+         _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid (outh', errh'))
 
--- | Wait until at least one handle is ready and then write input or
--- read output.  Note that there is no way to check whether the input
--- handle is ready except to try to write to it and see if any bytes
--- are accepted.  If no input is accepted, or the input handle is
--- already closed, and none of the output descriptors are ready for
--- reading the function sleeps and tries again.
+-- | Wait until at least one handle is ready and then read output.  If
+-- none of the output descriptors are ready for reading the function
+-- sleeps and tries again.
 ready :: (NonBlocking a) =>
          Int -> (Maybe Handle, Maybe Handle)
       -> IO (Maybe Handle, Maybe Handle, [Output a])
@@ -116,16 +113,20 @@ ready waitUSecs (outh, errh) =
         -- wait a bit
         (Unready, Unready) ->
             do threadDelay waitUSecs
-               --ePut0 ("Slept " ++ show uSecs ++ " microseconds\n")
                ready (min maxUSecs (2 * waitUSecs)) (outh, errh)
-        -- One or both output handles are ready, try to read from them
         _ ->
+            -- One or both output handles are ready, try to read from
+            -- them.  If (out1 ++ out2) is an empty list we know that
+            -- we have reached EOF on both descriptors, because at
+            -- least one was ready and nextOut only returns [] for a
+            -- ready file descriptor on EOF.
             do (out1, errh') <- nextOut errh errReady Stderr
                (out2, outh') <- nextOut outh outReady Stdout
                return (outh', errh', out1 ++ out2)
 
--- | Return the next output element and the updated handle
--- from a handle which is assumed ready.
+-- | Return the next output element and the updated handle from a
+-- handle which is assumed ready.  If the handle is closed or unready,
+-- or we reach end of file an empty list of outputs is returned.
 nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
