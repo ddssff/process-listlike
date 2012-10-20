@@ -1,9 +1,11 @@
 {-# LANGUAGE RankNTypes #-}
 module System.Process.Read.Convenience
-    ( isResult
+    ( -- * Predicates
+      isResult
     , isStdout
     , isStderr
     , isException
+    -- * Filters
     , discardStdout
     , discardStderr
     , discardExceptions
@@ -12,120 +14,103 @@ module System.Process.Read.Convenience
     , keepStderr
     , keepExceptions
     , keepResult
+    -- * Transformers
     , mergeToStdout
     , mergeToStderr
-    , sendOutputs
-    , foldChunks
-    , foldChunks'
-    , dots
+    , mapMaybeResult
     , mapMaybeStdout
-    , stdoutText
-    , stderrText
+    , mapMaybeStderr
+    , mapMaybeException
+    -- * IO operations
+    , ePutStr
+    , ePutStrLn
+    , doOutput
+    , doOutputs
+    , doOutputs_
+    , dots
     ) where
 
-import Control.Applicative (Applicative, (<$>))
+import Control.Applicative ((<$>))
 import Control.Exception (throw)
-import Data.Monoid (Monoid, mconcat)
+import Control.Monad.State (StateT(runStateT), get, put)
+import Control.Monad.Trans (lift, MonadIO, liftIO)
+import Data.Maybe (mapMaybe)
 import Prelude hiding (length, rem)
 import System.Exit (ExitCode, exitWith)
 import System.IO (stdout, stderr)
+import qualified System.IO as IO (hPutStr, hPutStrLn)
 import System.Process.Read.Chars (Chars(..))
-import System.Process.Read.Chunks (NonBlocking(..), Output(..))
+import System.Process.Read.Chunks (NonBlocking(..), Output(..), foldOutput)
 
-discardStdout :: [Output a] -> [Output a]
-discardStdout = filter (not . isStdout)
-discardStderr :: [Output a] -> [Output a]
-discardStderr = filter (not . isStderr)
-discardExceptions :: [Output a] -> [Output a]
-discardExceptions = filter (not . isException)
-discardResult :: [Output a] -> [Output a]
-discardResult = filter (not . isResult)
+isResult :: Chars a => Output a -> Bool
+isResult = foldOutput (const True) (const False) (const False) (const False)
+isStdout :: Chars a => Output a -> Bool
+isStdout = foldOutput (const False) (const True) (const False) (const False)
+isStderr :: Chars a => Output a -> Bool
+isStderr = foldOutput (const False) (const False) (const True) (const False)
+isException :: Chars a => Output a -> Bool
+isException = foldOutput (const False) (const False) (const False) (const True)
 
-mergeToStdout :: [Output a] -> [Output a]
+toStdout :: Chars a => Output a -> Output a
+toStdout = foldOutput Result Stdout Stdout Exception
+toStderr :: Chars a => Output a -> Output a
+toStderr = foldOutput Result Stderr Stderr Exception
+
+mergeToStdout :: Chars a => [Output a] -> [Output a]
 mergeToStdout = map toStdout
-mergeToStderr :: [Output a] -> [Output a]
+mergeToStderr :: Chars a => [Output a] -> [Output a]
 mergeToStderr = map toStderr
 
-toStdout :: Output a -> Output a
-toStdout (Stderr s) = Stdout s
-toStdout x = x
-toStderr :: Output a -> Output a
-toStderr (Stdout s) = Stderr s
-toStderr x = x
+discardStdout :: Chars a => [Output a] -> [Output a]
+discardStdout = filter (not . isStdout)
+discardStderr :: Chars a => [Output a] -> [Output a]
+discardStderr = filter (not . isStderr)
+discardExceptions :: Chars a => [Output a] -> [Output a]
+discardExceptions = filter (not . isException)
+discardResult :: Chars a => [Output a] -> [Output a]
+discardResult = filter (not . isResult)
 
-keepStdout :: [Output a] -> [Output a]
+keepStdout :: Chars a => [Output a] -> [Output a]
 keepStdout = filter isStdout
-keepStderr :: [Output a] -> [Output a]
+keepStderr :: Chars a => [Output a] -> [Output a]
 keepStderr = filter isStderr
-keepExceptions :: [Output a] -> [Output a]
+keepExceptions :: Chars a => [Output a] -> [Output a]
 keepExceptions = filter isException
-keepResult :: [Output a] -> [Output a]
+keepResult :: Chars a => [Output a] -> [Output a]
 keepResult = filter isResult
 
-isStdout :: Output a -> Bool
-isStdout (Stdout _) = True
-isStdout _ = False
-isStderr :: Output a -> Bool
-isStderr (Stderr _) = True
-isStderr _ = False
-isException :: Output a -> Bool
-isException (Exception _) = True
-isException _ = False
-isResult :: Output a -> Bool
-isResult (Result _) = True
-isResult _ = False
+mapMaybeResult :: Chars a => (ExitCode -> Maybe (Output a)) -> [Output a] -> [Output a]
+mapMaybeResult f = mapMaybe (foldOutput f (Just . Stdout) (Just . Stderr) (Just . Exception))
+mapMaybeStdout :: Chars a => (a -> Maybe (Output a)) -> [Output a] -> [Output a]
+mapMaybeStdout f = mapMaybe (foldOutput (Just . Result) f (Just . Stderr) (Just . Exception))
+mapMaybeStderr :: Chars a => (a -> Maybe (Output a)) -> [Output a] -> [Output a]
+mapMaybeStderr f = mapMaybe (foldOutput (Just . Result) (Just . Stdout) f (Just . Exception))
+mapMaybeException :: Chars a => (IOError -> Maybe (Output a)) -> [Output a] -> [Output a]
+mapMaybeException f = mapMaybe (foldOutput (Just . Result) (Just . Stdout) (Just . Stderr) f)
 
-foldChunks :: (Monad m, Applicative m, Chars a) =>
-              (ExitCode -> m b)
-           -> (a -> m b)
-           -> (a -> m b)
-           -> (IOError -> m b)
-           -> [Output a]
-           -> m [b]
-foldChunks codefn outfn errfn exnfn xs =
-    mapM f xs
+ePutStr :: MonadIO m => String -> m ()
+ePutStr s = liftIO $ IO.hPutStr stderr s
+
+ePutStrLn :: MonadIO m => String -> m ()
+ePutStrLn s = liftIO $ IO.hPutStrLn stderr s
+
+doOutput :: Chars a => Output a -> IO ()
+doOutput = foldOutput exitWith (hPutStr stdout) (hPutStr stderr) throw
+
+doOutputs :: NonBlocking a => [Output a] -> IO [Output a]
+doOutputs = mapM (\ x -> doOutput x >> return x)
+
+doOutputs_ :: NonBlocking a => [Output a] -> IO ()
+doOutputs_ = mapM_ doOutput
+
+dots :: forall a. NonBlocking a => LengthType a -> (LengthType a -> IO ()) -> [Output a] -> IO [Output a]
+dots charsPerDot nDots outputs =
+    fst <$> runStateT (dots' outputs) 0
     where
-      f (Result code) = codefn code
-      f (Stdout out) = outfn out
-      f (Stderr err) = errfn err
-      f (Exception exn) = exnfn exn
-
-foldChunks' :: (Monoid b, Monad m, Applicative m, Chars a) =>
-              (ExitCode -> m b)
-            -> (a -> m b)
-            -> (a -> m b)
-            -> (IOError -> m b)
-            -> [Output a]
-            -> m b
-foldChunks' codefn outfn errfn exnfn xs =
-    mconcat <$> foldChunks codefn outfn errfn exnfn xs
-
-sendOutputs :: NonBlocking a => [Output a] -> IO ()
-sendOutputs = foldChunks' exitWith (hPutStr stdout) (hPutStr stderr) throw
-
-dots :: forall a. NonBlocking a => Int -> (Int -> IO ()) -> [Output a] -> IO [Output a]
-dots charsPerDot put outputs =
-    put 1 >> dots' 0 outputs >> return outputs
-    where
-      dots' :: NonBlocking a => Int -> [Output a] -> IO ()
-      dots' _ [] = return ()
-      dots' rem (x : more) =
-          let count = case x of
-                        Stdout s -> length s
-                        Stderr s -> length s
-                        _ -> 0
-              (count', rem') = divMod (rem + fromInteger (toInteger count)) charsPerDot in
-          put count' >> dots' rem' more 
-
-mapMaybeStdout :: (a -> Maybe (Output a)) -> [Output a] -> [Output a]
-mapMaybeStdout f (Stdout s : more) = maybe [] (: []) ( f s) ++ mapMaybeStdout f more
-mapMaybeStdout f (x : more) = x : mapMaybeStdout f more
-mapMaybeStdout _ [] = []
-
-stdoutText :: Output a -> Maybe a
-stdoutText (Stdout x) = Just x
-stdoutText _ = Nothing
-
-stderrText :: Output a -> Maybe a
-stderrText (Stderr x) = Just x
-stderrText _ = Nothing
+      dots' [] = return []
+      dots' (x : xs) = do
+          rem <- get
+          let (count', rem') = divMod (rem + foldOutput (const 0) length length (const 0) x) charsPerDot
+          lift (nDots count')
+          put rem'
+          dots' xs >>= \ xs' -> return (x : xs')

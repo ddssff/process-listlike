@@ -7,6 +7,7 @@
 module System.Process.Read.Chunks (
   NonBlocking(..),
   Output(..),
+  foldOutput,
   readProcessChunks
   ) where
 
@@ -27,6 +28,20 @@ class Chars a => NonBlocking a where
   hGetNonBlocking :: Handle -> Int -> IO a
 
 data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving Show
+
+-- | A fold function for the Output type, dispatches the value
+-- depending on the constructor.
+foldOutput :: Chars a =>
+              (ExitCode -> b)
+           -> (a -> b)
+           -> (a -> b)
+           -> (IOError -> b)
+           -> Output a
+           -> b
+foldOutput codefn _ _ _ (Result code) = codefn code
+foldOutput _ outfn _ _ (Stdout out) = outfn out
+foldOutput _ _ errfn _ (Stderr err) = errfn err
+foldOutput _ _ _ exnfn (Exception exn) = exnfn exn
 
 -- | This is a process runner which (at the cost of a busy loop) gives
 -- you the chunks of text read from stdout and stderr interleaved in
