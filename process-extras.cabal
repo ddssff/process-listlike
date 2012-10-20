@@ -28,6 +28,7 @@ Library
   Other-modules:
     System.Process.Read.Chars
     System.Process.Read.Chunks
+    System.Process.Read.Compat
     System.Process.Read.Instances
     System.Process.Read.Convenience
   Build-depends:
