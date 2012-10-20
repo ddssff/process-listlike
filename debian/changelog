@@ -1,3 +1,11 @@
+haskell-process-extras (0.4.1) unstable; urgency=low
+
+  * Redo and simplify readProcessChunks so it works on infinite streams without
+    hanging or leaking memory.
+  * Add some tests (though not in a formal framework yet.)
+
+ -- David Fox <dsf@seereason.com>  Sat, 20 Oct 2012 15:24:15 -0700
+
 haskell-process-extras (0.4) unstable; urgency=low
 
   * Re-arrange the modules so that we can generally just import
