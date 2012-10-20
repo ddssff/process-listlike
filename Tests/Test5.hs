@@ -1,7 +1,7 @@
 #!/usr/bin/runhaskell
 
 import System.Process (CmdSpec(RawCommand))
-import System.Process.String (readModifiedProcessWithExitCode)
+import System.Process.Read (readModifiedProcessWithExitCode)
 
 main =
     do (code, out, err) <- readModifiedProcessWithExitCode id (RawCommand "Tests/Test4.hs" []) "abcde"

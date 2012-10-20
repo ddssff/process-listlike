@@ -67,7 +67,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ elements pid (Just outh, Just errh)
+    waitOut <- forkWait $ elements pid (outh, errh)
 
     -- now write and flush any input
     unless (null input) (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished (\ _e -> return ())
@@ -77,33 +77,44 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> (Maybe Handle, Maybe Handle) -> IO [Output a]
-elements pid (Nothing, Nothing) =
-    -- EOF on both output descriptors, get exit code.  It can be
-    -- argued that the result will always contain exactly one exit
-    -- code if traversed to its end, because the only case of
-    -- 'elements' that does not recurse is the one that adds a Result,
-    -- and there is nowhere else where a Result is added.  However,
-    -- the process doing the traversing may die before that end is
-    -- reached.
-    do result <- waitForProcess pid
-       -- Note that there is no need to insert the result code
-       -- at the end of the list.
-       return [Result result]
+elements :: NonBlocking a => ProcessHandle -> (Handle, Handle) -> IO [Output a]
 elements pid (outh, errh) =
-    -- The available output has been processed, send input and read
-    -- from the ready handles
-    do (outh', errh', elems') <- ready uSecs (outh, errh)
-       case elems' of
-         [] -> return []
-         _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid (outh', errh'))
+    do outReady <- hReady' outh
+       errReady <- hReady' errh
+       case (outReady, errReady) of
+         (Closed, Closed) ->
+           -- EOF on both output descriptors, get exit code.  It can be
+           -- argued that the result will always contain exactly one exit
+           -- code if traversed to its end, because the only case of
+           -- 'elements' that does not recurse is the one that adds a Result,
+           -- and there is nowhere else where a Result is added.  However,
+           -- the process doing the traversing may die before that end is
+           -- reached.
+           do result <- waitForProcess pid
+              return [Result result]
+         _ ->
+           -- The available output has been processed, send input and read
+           -- from the ready handles
+           do elems' <- ready uSecs (outh, errh)
+              case elems' of
+                [] -> return []
+                _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid (outh, errh))
+
+data Readyness = Ready | Unready | Closed
+
+hReady' :: Handle -> IO Readyness
+hReady' h =
+    hIsClosed h >>= checkReady
+    where
+      checkReady True = return Closed
+      checkReady False = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` endOfFile (\ _ -> return Closed)
 
 -- | Wait until at least one handle is ready and then read output.  If
 -- none of the output descriptors are ready for reading the function
 -- sleeps and tries again.
 ready :: (NonBlocking a) =>
-         Int -> (Maybe Handle, Maybe Handle)
-      -> IO (Maybe Handle, Maybe Handle, [Output a])
+         Int -> (Handle, Handle)
+      -> IO [Output a]
 ready waitUSecs (outh, errh) =
     do
       outReady <- hReady' outh
@@ -120,37 +131,25 @@ ready waitUSecs (outh, errh) =
             -- we have reached EOF on both descriptors, because at
             -- least one was ready and nextOut only returns [] for a
             -- ready file descriptor on EOF.
-            do (out1, errh') <- nextOut errh errReady Stderr
-               (out2, outh') <- nextOut outh outReady Stdout
-               return (outh', errh', out1 ++ out2)
+            do out1 <- nextOut errh errReady Stderr
+               out2 <- nextOut outh outReady Stdout
+               return (out1 ++ out2)
 
 -- | Return the next output element and the updated handle from a
 -- handle which is assumed ready.  If the handle is closed or unready,
 -- or we reach end of file an empty list of outputs is returned.
-nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO ([Output a], Maybe Handle)
-nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
-nextOut _ Closed _ = return ([], Nothing)	-- Handle is closed
-nextOut h Unready _ = return ([], h)		-- Handle is not ready
-nextOut (Just h) Ready constructor =	-- Perform a read
+nextOut :: NonBlocking a => Handle -> Readyness -> (a -> Output a) -> IO [Output a]
+nextOut h Ready constructor =	-- Perform a read
     do
       a <- hGetNonBlocking h bufSize
       case length a of
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
         0 -> do hClose h
-                return ([], Nothing)
+                return []
         -- Got some output
-        _n -> return ([constructor a], Just h)
-
-data Readyness = Ready | Unready | Closed
-
-hReady' :: Maybe Handle -> IO Readyness
-hReady' Nothing = return Closed
-hReady' (Just h) =
-    hIsClosed h >>= checkReady
-    where
-      checkReady True = return Closed
-      checkReady False = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` endOfFile (\ _ -> return Closed)
+        _n -> return [constructor a]
+nextOut _ _ _ = return []	-- Handle is closed or not ready
 
 endOfFile :: (IOError -> IO a) -> IOError -> IO a
 endOfFile eeof e = if E.ioe_type e == E.EOF then eeof e else ioError e
