@@ -2,9 +2,12 @@
 {-# LANGUAGE RankNTypes, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.Compat
     ( prefixes
+    , echo
     ) where
 
 import qualified Data.ByteString.Lazy.Char8 as L
+import System.Process (CmdSpec(..), showCommandForUser)
+import System.Process.Read.Convenience (ePutStrLn)
 import System.Process.Read.Chunks (Output(..))
 
 -- | Return the original stream of outputs zipped with one that has
@@ -34,5 +37,6 @@ doOutput bol pre s =
              (s', bol') = doOutput False pre b in
          (L.append x s', bol')
 
-echo :: CmdSpec -> IO ()
-echo cmd io = ePutStrLn ("-> " ++ showCommandForUser cmd)
+echo :: CmdSpec -> IO () -> IO ()
+echo (RawCommand cmd args) io = ePutStrLn ("-> " ++ showCommandForUser cmd args) >> io
+echo (ShellCommand cmd) io = ePutStrLn ("-> " ++ cmd) >> io
