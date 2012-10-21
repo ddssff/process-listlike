@@ -11,7 +11,7 @@ import System.Process.Read
 import System.Process.Read.Chunks (NonBlocking, Output(..))
 
 main =
-    test1 >> test2 >> (try test3 >>= either (\ (e :: SomeException) -> hPutStrLn stderr (show e)) return)  >> test4
+    test1 >> test2 >> (try test3 >>= either (\ (e :: SomeException) -> hPutStrLn stderr (show e)) return)  >> test4 >> test5
 
 test1 =
     hPutStrLn stderr "=== test1 ===" >>
@@ -67,3 +67,6 @@ stdoutOnly out =
       f (Stdout s : etc) = s : f etc
       f (_ : etc) = f etc
       f [] = []
+
+test5 =
+    readProcessChunks id (ShellCommand "yes | cat -n | head -1000") ""

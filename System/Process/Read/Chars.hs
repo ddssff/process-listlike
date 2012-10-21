@@ -37,6 +37,12 @@ class Integral (LengthType a) => Chars a where
   hPutStr :: Handle -> a -> IO ()
   hGetContents :: Handle -> IO a
 
+  append :: a -> a -> a
+  concat :: [a] -> a
+  toString :: a -> String
+  fromString :: String -> a
+  empty :: a
+
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' with a few
 -- generalizations:

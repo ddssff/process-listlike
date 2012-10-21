@@ -8,6 +8,7 @@ module System.Process.Read.Chunks (
   NonBlocking(..),
   Output(..),
   foldOutput,
+  foldOutputs,
   readProcessChunks
   ) where
 
@@ -43,6 +44,19 @@ foldOutput codefn _ _ _ (Result code) = codefn code
 foldOutput _ outfn _ _ (Stdout out) = outfn out
 foldOutput _ _ errfn _ (Stderr err) = errfn err
 foldOutput _ _ _ exnfn (Exception exn) = exnfn exn
+
+foldOutputs :: Chars a =>
+               (b -> ExitCode -> b)
+            -> (b -> a -> b)
+            -> (b -> a -> b)
+            -> (b -> IOError -> b)
+            -> b
+            -> [Output a]
+            -> b
+foldOutputs _ _ _ _ result [] = result
+foldOutputs codefn outfn errfn exnfn result (x : xs) =
+    let result' = foldOutput (codefn result) (outfn result) (errfn result) (exnfn result) x in
+    foldOutputs codefn outfn errfn exnfn result' xs
 
 -- | This is a process runner which (at the cost of a busy loop) gives
 -- you the chunks of text read from stdout and stderr interleaved in

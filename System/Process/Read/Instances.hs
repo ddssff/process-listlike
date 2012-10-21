@@ -22,6 +22,11 @@ instance Chars.Chars String where
   lazy _ = True
   length = length
   null = null
+  append = (++)
+  concat = concat
+  fromString = id
+  toString = id
+  empty = ""
   hPutStr h s = L.hPutStr h (L.fromChunks [fromString s])
   hGetContents h = (toString . B.concat . L.toChunks) <$> L.hGetContents h
 
@@ -34,6 +39,11 @@ instance Chars.Chars B.ByteString where
   lazy _ = False
   length = B.length
   null = B.null
+  append = B.append
+  concat = B.concat
+  fromString = fromString
+  toString = toString
+  empty = B.empty
   hPutStr = B.hPutStr
   hGetContents = B.hGetContents
 
@@ -46,6 +56,11 @@ instance Chars.Chars L.ByteString where
   lazy _ = True
   length = L.length
   null = L.null
+  append = L.append
+  concat = L.concat
+  fromString = L.fromChunks . (: []) . fromString
+  toString = toString . B.concat . L.toChunks
+  empty = L.empty
   hPutStr = L.hPutStr
   hGetContents = L.hGetContents
 
@@ -58,6 +73,11 @@ instance Chars.Chars T.Text where
   lazy _ = False
   length = T.length
   null = T.null
+  append = T.append
+  concat = T.concat
+  fromString = T.pack
+  toString = T.unpack
+  empty = T.empty
   hPutStr = T.hPutStr
   hGetContents = T.hGetContents
 
@@ -67,5 +87,10 @@ instance Chars.Chars LT.Text where
   lazy _ = True
   length = LT.length
   null = LT.null
+  append = LT.append
+  concat = LT.concat
+  fromString = LT.pack
+  toString = LT.unpack
+  empty = LT.empty
   hPutStr = LT.hPutStr
   hGetContents = LT.hGetContents
