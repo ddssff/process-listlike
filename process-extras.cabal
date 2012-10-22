@@ -24,13 +24,12 @@ Library
 
   Exposed-modules:
     System.Process.Read
-
-  Other-modules:
     System.Process.Read.Chars
     System.Process.Read.Chunks
     System.Process.Read.Compat
-    System.Process.Read.Instances
     System.Process.Read.Convenience
+    System.Process.Read.Instances
+
   Build-depends:
     base >= 4 && < 5,
     process,
