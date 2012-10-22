@@ -98,7 +98,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ elements pid (outh, errh)
+    waitOut <- forkWait $ elements pid outh errh
 
     -- now write and flush any input
     unless (null input) (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished (\ _e -> return ())
@@ -108,8 +108,8 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> (Handle, Handle) -> IO [Output a]
-elements pid (outh, errh) =
+elements :: NonBlocking a => ProcessHandle -> Handle -> Handle -> IO [Output a]
+elements pid outh errh =
     do outClosed <- hIsClosed outh
        errClosed <- hIsClosed errh
        case (outClosed, errClosed) of
@@ -129,7 +129,7 @@ elements pid (outh, errh) =
            do elems' <- ready uSecs (outh, errh)
               case elems' of
                 [] -> return []
-                _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid (outh, errh))
+                _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid outh errh)
 
 data Readyness = Ready | Unready | Closed
 
