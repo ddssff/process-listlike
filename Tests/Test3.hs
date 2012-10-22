@@ -6,9 +6,10 @@ import Control.Exception (try, throw, SomeException)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import System.IO (hPutStrLn, stderr)
-import System.Process (CmdSpec(RawCommand))
+import System.Process (CmdSpec(RawCommand, ShellCommand))
 import System.Process.Read
 import System.Process.Read.Chunks (NonBlocking, Output(..))
+import System.Process.Read.Convenience (unpackOutputs)
 
 main =
     test1 >> test2 >> (try test3 >>= either (\ (e :: SomeException) -> hPutStrLn stderr (show e)) return)  >> test4 >> test5
@@ -69,4 +70,4 @@ stdoutOnly out =
       f [] = []
 
 test5 =
-    readProcessChunks id (ShellCommand "yes | cat -n | head -1000") ""
+    readProcessChunks id (ShellCommand "yes | cat -n | head -1000") "" >>= return . unpackOutputs
