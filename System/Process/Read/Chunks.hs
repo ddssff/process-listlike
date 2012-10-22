@@ -173,7 +173,7 @@ ready waitUSecs outh errh =
             -- ready file descriptor on EOF.
             do (errh', out1) <- nextOut errh errReady Stderr
                (outh', out2) <- nextOut outh outReady Stdout
-               return (errh', outh', out1 ++ out2)
+               return (outh', errh', out1 ++ out2)
 
 -- | Return the next output element and the updated handle from a
 -- handle which is assumed ready.  If the handle is closed or unready,
