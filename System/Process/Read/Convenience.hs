@@ -183,7 +183,7 @@ dots :: forall a. NonBlocking a => LengthType a -> (LengthType a -> IO ()) -> [O
 dots charsPerDot nDots outputs =
     nDots 1 >> dots' 0 outputs
     where
-      dots' rem [] = nDots 1 >> return []
+      dots' _ [] = nDots 1 >> return []
       dots' rem (x : xs) =
           do let (count', rem') = divMod (rem + foldOutput (const 0) length length (const 0) x) charsPerDot
              when (count' > 0) (nDots count')

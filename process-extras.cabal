@@ -34,13 +34,14 @@ Library
     base >= 4 && < 5,
     process,
     bytestring,
+    deepseq,
     HUnit,
     mtl,
     process,
     text,
     time,
-    utf8-string,
-    deepseq
+    unix,
+    utf8-string
 
 Executable dots
   Main-Is: Tests/Dots.hs

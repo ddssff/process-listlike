@@ -15,9 +15,9 @@ module System.Process.Read.Chunks (
   ) where
 
 import Control.Applicative ((<$>))
-import Control.Concurrent
-import Control.Exception
-import Control.Monad
+import Control.Concurrent (forkIO, threadDelay, MVar, newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (onException, catch, mask)
+import Control.Monad (unless)
 import qualified GHC.IO.Exception as E
 import Prelude hiding (catch, null, length, init, rem)
 import qualified Prelude
@@ -202,6 +202,7 @@ maxUSecs :: Int
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | A test version of readProcessChunks.
+-- Pipes code here: http://hpaste.org/76631
 readProcessChunks' :: (NonBlocking a) =>
                       (CreateProcess -> CreateProcess)
                    -> CmdSpec
