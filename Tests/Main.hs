@@ -17,6 +17,7 @@ import Test.HUnit
 main :: IO ()
 main =
     do chmod "Tests/Test1.hs"
+       chmod "Tests/Test2.hs"
        chmod "Tests/Test4.hs"
        (c,st) <- runTestText putTextToShowS test1 -- (TestList (versionTests ++ sourcesListTests ++ dependencyTests ++ changesTests))
        putStrLn (st "")
@@ -89,4 +90,9 @@ test1 =
          TestCase (do out <- readProcessChunks' id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
                       let result = unpackOutputs out
                       assertEqual "readProcessChunks' stdout stderr" ([ExitSuccess], "stdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\n","stderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\n", []) result)
+{-
+       , TestLabel "timed dot test" $
+         TestCase (do output <- readModifiedProcess id (ShellCommand "Tests/Test2.hs") "" >>= return . take 10
+                      assertEqual "timed dot test" ".........." output)
+-}
        ])
