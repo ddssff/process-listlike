@@ -24,11 +24,13 @@ import System.IO hiding (hPutStr, hGetContents)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (CreateProcess(..), StdStream(CreatePipe), ProcessHandle,
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
-import System.Process.Read.Chars (Chars(init, null, hPutStr, length), proc', forkWait, resourceVanished)
+import System.Process.Read.Chars (Chars(init, null, hPutStr, length), LengthType, proc', forkWait, resourceVanished)
 
 -- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
 class Chars a => NonBlocking a where
   hGetNonBlocking :: Handle -> Int -> IO a
+  hGetSome :: Handle -> LengthType a -> IO a
+  toChunks :: a -> [a]
 
 data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving (Eq, Show)
 

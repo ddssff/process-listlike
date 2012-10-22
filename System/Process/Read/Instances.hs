@@ -32,6 +32,8 @@ instance Chars.Chars String where
 
 instance Chunks.NonBlocking String where
   hGetNonBlocking n h = (toString . B.concat . L.toChunks) <$> L.hGetNonBlocking n h
+  hGetSome h n = toString <$> B.hGetSome h n
+  toChunks = error "toChunks"
 
 instance Chars.Chars B.ByteString where
   type LengthType B.ByteString = Int
@@ -49,6 +51,8 @@ instance Chars.Chars B.ByteString where
 
 instance Chunks.NonBlocking B.ByteString where
   hGetNonBlocking = B.hGetNonBlocking
+  hGetSome = B.hGetSome
+  toChunks = (: [])
 
 instance Chars.Chars L.ByteString where
   type LengthType L.ByteString = Int64
@@ -66,6 +70,8 @@ instance Chars.Chars L.ByteString where
 
 instance Chunks.NonBlocking L.ByteString where
   hGetNonBlocking = L.hGetNonBlocking
+  hGetSome h n = (L.fromChunks . (: [])) <$> B.hGetSome h (fromIntegral n)
+  toChunks = map (L.fromChunks . (: [])) . L.toChunks
 
 instance Chars.Chars T.Text where
   type LengthType T.Text = Int
