@@ -197,3 +197,23 @@ uSecs :: Int
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs :: Int
 maxUSecs = 100000	-- maximum wait time (microseconds)
+
+{-
+-- | An idea for a replacement of elements
+elements :: (NonBlocking a) => ProcessHandle -> Handle -> Handle -> IO [Output a]
+elements pid outh errh = do
+  res <- newEmptyMVar
+  forkIO $ hGetContents outh >>= mapM_ (\ c -> putMVar res (Stdout c)) . toChunks
+  forkIO $ hGetContents errh >>= mapM_ (\ c -> putMVar res (Stderr c)) . toChunks
+  takeChunks res
+    where
+      takeChunks :: MVar (Output a) -> IO [Output a]
+      takeChunks res = do
+        outClosed <- hIsClosed outh
+        errClosed <- hIsClosed errh
+        case outClosed && errClosed of
+          True -> waitForProcess pid >>= \ result -> return [Result result]
+          False -> do x <- takeMVar res
+                      xs <- takeChunks res
+                      return (x : xs)
+-}
