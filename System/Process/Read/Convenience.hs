@@ -49,6 +49,7 @@ module System.Process.Read.Convenience
 
 import Control.Applicative ((<$>))
 import Control.Exception (throw)
+import Control.Monad (when)
 import Control.Monad.State (StateT(runStateT), get, put)
 import Control.Monad.Trans (lift, MonadIO, liftIO)
 import Data.Maybe (mapMaybe)
@@ -188,6 +189,6 @@ dots charsPerDot nDots outputs =
       dots' (x : xs) = do
           rem <- get
           let (count', rem') = divMod (rem + foldOutput (const 0) length length (const 0) x) charsPerDot
-          lift (nDots count')
+          when (count' > 0) (lift (nDots count'))
           put rem'
           dots' xs >>= \ xs' -> return (x : xs')
