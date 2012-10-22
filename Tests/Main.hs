@@ -76,16 +76,12 @@ test1 =
        , TestLabel "file closed 4" $
          TestCase (do result <- readModifiedProcessWithExitCode id (RawCommand "Tests/Test4.hs" []) "abcde"
                       assertEqual "file closed 4" (ExitSuccess, "a", "Read one character: 'a'\n") result)
-       , TestLabel "readProcessChunks gzip" $
-         TestCase (do result <- readProcessChunks id (ShellCommand "gzip -v -f < /usr/share/pixmaps/faces/penguin.jpg") L.empty
-                      assertEqual "readProcessChunks gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))
+       , test2
        , TestLabel "readProcessChunks stdout stderr" $
          TestCase (do out <- readProcessChunks id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
                       let result = unpackOutputs out
                       assertEqual "readProcessChunks stdout stderr" ([ExitSuccess], "stdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\n","stderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\n", []) result)
-       , TestLabel "readProcessChunks' gzip'" $
-         TestCase (do result <- readProcessChunks' id (ShellCommand "gzip -v -f < /usr/share/pixmaps/faces/penguin.jpg") L.empty
-                      assertEqual "readProcessChunks' gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))
+       , test3
        , TestLabel "readProcessChunks' stdout stderr" $
          TestCase (do out <- readProcessChunks' id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
                       let result = unpackOutputs out
@@ -96,3 +92,13 @@ test1 =
                       assertEqual "timed dot test" ".........." output)
 -}
        ])
+
+test2 :: Test
+test2 = TestLabel "readProcessChunks gzip" $
+        TestCase (do result <- readProcessChunks id (ShellCommand "gzip -v -f < /usr/share/pixmaps/faces/penguin.jpg") L.empty
+                     assertEqual "readProcessChunks gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))
+
+test3 :: Test
+test3 = TestLabel "readProcessChunks' gzip'" $
+        TestCase (do result <- readProcessChunks' id (ShellCommand "gzip -v -f < /usr/share/pixmaps/faces/penguin.jpg") L.empty
+                     assertEqual "readProcessChunks' gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))

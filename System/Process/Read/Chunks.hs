@@ -14,7 +14,6 @@ module System.Process.Read.Chunks (
   readProcessChunks'
   ) where
 
-import Control.Applicative ((<$>))
 import Control.Concurrent (forkIO, threadDelay, MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (onException, catch, mask)
 import Control.Monad (unless)
@@ -181,8 +180,8 @@ ready waitUSecs outh errh =
 nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO (Maybe Handle, [Output a])
 nextOut Nothing _ _ = return (Nothing, [])
 nextOut (Just h) Ready constructor =	-- Perform a read
-    do
-      a <- hGetNonBlocking h bufSize
+   do -- We can call hGetSome because we know this handle is ready for reading.
+      a <- hGetSome h (fromIntegral bufSize)
       case length a of
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
