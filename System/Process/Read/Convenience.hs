@@ -47,11 +47,9 @@ module System.Process.Read.Convenience
     , dots
     ) where
 
-import Control.Applicative ((<$>))
 import Control.Exception (throw)
 import Control.Monad (when)
-import Control.Monad.State (StateT(runStateT), get, put)
-import Control.Monad.Trans (lift, MonadIO, liftIO)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Data.Maybe (mapMaybe)
 import Prelude hiding (length, rem, concat)
 import System.Exit (ExitCode(..), exitWith)
@@ -183,12 +181,11 @@ doAll = mapM (foldOutput (\ code -> exitWith code >> return (Result code))
 
 dots :: forall a. NonBlocking a => LengthType a -> (LengthType a -> IO ()) -> [Output a] -> IO [Output a]
 dots charsPerDot nDots outputs =
-    fst <$> runStateT (dots' outputs) 0
+    nDots 1 >> dots' 0 outputs
     where
-      dots' [] = return []
-      dots' (x : xs) = do
-          rem <- get
-          let (count', rem') = divMod (rem + foldOutput (const 0) length length (const 0) x) charsPerDot
-          when (count' > 0) (lift (nDots count'))
-          put rem'
-          dots' xs >>= \ xs' -> return (x : xs')
+      dots' rem [] = nDots 1 >> return []
+      dots' rem (x : xs) =
+          do let (count', rem') = divMod (rem + foldOutput (const 0) length length (const 0) x) charsPerDot
+             when (count' > 0) (nDots count')
+             xs' <- dots' rem' xs
+             return (x : xs')
