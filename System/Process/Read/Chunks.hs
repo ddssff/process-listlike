@@ -10,7 +10,8 @@ module System.Process.Read.Chunks (
   foldOutput,
   foldOutputsL,
   foldOutputsR,
-  readProcessChunks
+  readProcessChunks,
+  readProcessChunks'
   ) where
 
 import Control.Applicative ((<$>))
@@ -19,12 +20,14 @@ import Control.Exception
 import Control.Monad
 import qualified GHC.IO.Exception as E
 import Prelude hiding (catch, null, length, init, rem)
+import qualified Prelude
 import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
+import System.IO.Error (mkIOError)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (CreateProcess(..), StdStream(CreatePipe), ProcessHandle,
                        CmdSpec, createProcess, waitForProcess, terminateProcess)
-import System.Process.Read.Chars (Chars(init, null, hPutStr, length), LengthType, proc', forkWait, resourceVanished)
+import System.Process.Read.Chars (Chars(init, null, hPutStr, length, hGetContents), LengthType, proc', forkWait, resourceVanished)
 
 -- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
 class Chars a => NonBlocking a where
@@ -138,7 +141,7 @@ data Readyness = Ready | Unready | Closed
 hReady' :: Handle -> IO Readyness
 hReady' h =
     -- This check is necessary because if we run hReady on a closed
-    -- handle it will keep giving us EndOfFile exceptions.
+    -- handle it will keep giving us EOF exceptions.
     hIsClosed h >>= checkReady
     where
       checkReady True = return Closed
@@ -198,22 +201,47 @@ uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs :: Int
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
-{-
+-- | A test version of readProcessChunks.
+readProcessChunks' :: (NonBlocking a) =>
+                      (CreateProcess -> CreateProcess)
+                   -> CmdSpec
+                   -> a
+                   -> IO [Output a]
+readProcessChunks' modify cmd input = mask $ \ restore -> do
+  let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
+
+  (Just inh, Just outh, Just errh, pid) <-
+      createProcess (modify' (proc' cmd))
+
+  init input [inh, outh, errh]
+
+  flip onException
+    (do hClose inh; hClose outh; hClose errh;
+        terminateProcess pid; waitForProcess pid) $ restore $ do
+
+    waitOut <- forkWait $ elements' pid outh errh
+
+    -- now write and flush any input
+    unless (null input) (hPutStr inh input >> hFlush inh >> hClose inh) `catch` resourceVanished (\ _e -> return ())
+
+    -- wait on the output
+    waitOut
+
 -- | An idea for a replacement of elements
-elements :: (NonBlocking a) => ProcessHandle -> Handle -> Handle -> IO [Output a]
-elements pid outh errh = do
+elements' :: forall a. NonBlocking a => ProcessHandle -> Handle -> Handle -> IO [Output a]
+elements' pid outh errh = do
   res <- newEmptyMVar
-  forkIO $ hGetContents outh >>= mapM_ (\ c -> putMVar res (Stdout c)) . toChunks
-  forkIO $ hGetContents errh >>= mapM_ (\ c -> putMVar res (Stderr c)) . toChunks
-  takeChunks res
+  -- We use Exception EOF to indicate that we reached EOF on one
+  -- handle.  This is not a value that could otherwise have been put
+  -- into the MVar.
+  _outtid <- forkIO $ hGetContents outh >>= mapM_ (\ c -> putMVar res (Stdout c)) . toChunks >> hClose outh >> putMVar res (Exception (mkIOError E.EOF "EOF" Nothing Nothing))
+  _errtid <- forkIO $ hGetContents errh >>= mapM_ (\ c -> putMVar res (Stderr c)) . toChunks >> hClose errh >> putMVar res (Exception (mkIOError E.EOF "EOF" Nothing Nothing))
+  takeChunks 0 res
     where
-      takeChunks :: MVar (Output a) -> IO [Output a]
-      takeChunks res = do
-        outClosed <- hIsClosed outh
-        errClosed <- hIsClosed errh
-        case outClosed && errClosed of
-          True -> waitForProcess pid >>= \ result -> return [Result result]
-          False -> do x <- takeMVar res
-                      xs <- takeChunks res
-                      return (x : xs)
--}
+      takeChunks :: Int -> MVar (Output a) -> IO [Output a]
+      takeChunks 2 _ = waitForProcess pid >>= \ result -> return [Result result]
+      takeChunks closedCount res = takeMVar res >>= takeChunk closedCount res
+      takeChunk closedCount res (Exception _) = takeChunks (closedCount + 1) res
+      takeChunk closedCount res x =
+          do xs <- unsafeInterleaveIO $ takeChunks closedCount res
+             return (x : xs)
