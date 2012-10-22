@@ -13,7 +13,7 @@ module System.Process.Read.Chars (
   ) where
 
 import Control.Concurrent
-import Control.Exception
+import Control.Exception (SomeException, onException, evaluate, catch, try, throwIO, mask)
 import Control.Monad
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (catch, null, length)
