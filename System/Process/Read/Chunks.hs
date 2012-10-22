@@ -130,7 +130,7 @@ elements pid outh errh =
          _ ->
            -- The available output has been processed, send input and read
            -- from the ready handles
-           do (outh', errh', elems') <- ready uSecs (outh, errh)
+           do (outh', errh', elems') <- ready uSecs outh errh
               more <- unsafeInterleaveIO (elements pid outh' errh')
               return $ elems' ++ more
 
@@ -151,9 +151,9 @@ hReady' h =
 -- none of the output descriptors are ready for reading the function
 -- sleeps and tries again.
 ready :: (NonBlocking a) =>
-         Int -> (Maybe Handle, Maybe Handle)
+         Int -> Maybe Handle -> Maybe Handle
       -> IO (Maybe Handle, Maybe Handle, [Output a])
-ready waitUSecs (outh, errh) =
+ready waitUSecs outh errh =
     do
       outReady <- maybe (return Closed) hReady' outh
       errReady <- maybe (return Closed) hReady' errh
@@ -164,7 +164,7 @@ ready waitUSecs (outh, errh) =
         -- wait a bit
         (Unready, Unready) ->
             do threadDelay waitUSecs
-               ready (min maxUSecs (2 * waitUSecs)) (outh, errh)
+               ready (min maxUSecs (2 * waitUSecs)) outh errh
         _ ->
             -- One or both output handles are ready, try to read from
             -- them.  If (out1 ++ out2) is an empty list we know that
