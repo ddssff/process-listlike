@@ -8,7 +8,8 @@ module System.Process.Read.Chunks (
   NonBlocking(..),
   Output(..),
   foldOutput,
-  foldOutputs,
+  foldOutputsL,
+  foldOutputsR,
   readProcessChunks
   ) where
 
@@ -45,18 +46,34 @@ foldOutput _ outfn _ _ (Stdout out) = outfn out
 foldOutput _ _ errfn _ (Stderr err) = errfn err
 foldOutput _ _ _ exnfn (Exception exn) = exnfn exn
 
-foldOutputs :: Chars a =>
-               (b -> ExitCode -> b)
-            -> (b -> a -> b)
-            -> (b -> a -> b)
-            -> (b -> IOError -> b)
-            -> b
-            -> [Output a]
-            -> b
-foldOutputs _ _ _ _ result [] = result
-foldOutputs codefn outfn errfn exnfn result (x : xs) =
+foldOutputsL :: Chars a =>
+                (b -> ExitCode -> b)
+             -> (b -> a -> b)
+             -> (b -> a -> b)
+             -> (b -> IOError -> b)
+             -> b
+             -> [Output a]
+             -> b
+foldOutputsL _ _ _ _ result [] = result
+foldOutputsL codefn outfn errfn exnfn result (x : xs) =
     let result' = foldOutput (codefn result) (outfn result) (errfn result) (exnfn result) x in
-    foldOutputs codefn outfn errfn exnfn result' xs
+    foldOutputsL codefn outfn errfn exnfn result' xs
+    -- Pretty sure this is equivalent:
+    -- foldl (\ r x -> foldOutput (codefn r) (outfn r) (errfn r) (exnfn r) x) result xs
+
+foldOutputsR :: forall a b. Chars a =>
+                (b -> ExitCode -> b)
+             -> (b -> a -> b)
+             -> (b -> a -> b)
+             -> (b -> IOError -> b)
+             -> b
+             -> [Output a]
+             -> b
+foldOutputsR _ _ _ _ result [] = result
+foldOutputsR codefn outfn errfn exnfn result (x : xs) =
+    let result' = foldOutputsR codefn outfn errfn exnfn result xs in
+    foldOutput (codefn result') (outfn result') (errfn result') (exnfn result') x
+    -- foldr (\ x r -> foldOutput (codefn r) (outfn r) (errfn r) (exnfn r) x) result xs
 
 -- | This is a process runner which (at the cost of a busy loop) gives
 -- you the chunks of text read from stdout and stderr interleaved in

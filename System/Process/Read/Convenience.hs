@@ -57,7 +57,7 @@ import System.Exit (ExitCode(..), exitWith)
 import System.IO (stdout, stderr)
 import qualified System.IO as IO (hPutStr, hPutStrLn)
 import System.Process.Read.Chars (Chars(..))
-import System.Process.Read.Chunks (NonBlocking(..), Output(..), foldOutput, foldOutputs)
+import System.Process.Read.Chunks (NonBlocking(..), Output(..), foldOutput, foldOutputsR)
 
 isResult :: Chars a => Output a -> Bool
 isResult = foldOutput (const True) (const False) (const False) (const False)
@@ -115,7 +115,7 @@ unpackOutputs :: forall a. Chars a => [Output a] -> ([ExitCode], String, String,
 unpackOutputs xs =
     (codes, toString outs, toString errs, exns)
     where
-      (codes, outs, errs, exns) = foldOutputs codefn outfn errfn exnfn result0 xs
+      (codes, outs, errs, exns) = foldOutputsR codefn outfn errfn exnfn result0 xs
       result0 :: ([ExitCode], a, a, [IOError])
       result0 = ([], empty, empty, [])
       codefn :: ([ExitCode], a, a, [IOError]) -> ExitCode -> ([ExitCode], a, a, [IOError])
