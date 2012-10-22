@@ -17,7 +17,7 @@ import qualified Data.Text.Lazy as LT
 import Prelude hiding (length, concat)
 --import System.IO.Unsafe (unsafePerformIO)
 import System.Process (CmdSpec(..))
-import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, readProcessChunks, keepStdout, Chars(..), discardStdout, Output(..))
+import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, readProcessChunks, keepStdout, Chars(..), discardStdout, Output(..), unpackOutputs)
 
 main :: IO ()
 main =
@@ -57,4 +57,6 @@ test1 =
                       assertEqual "file closed" (ExitSuccess, "a", "Read one character: 'a'\n") result)
        , TestCase (do result <- readProcessChunks id (ShellCommand "gzip -v -f < /usr/share/pixmaps/faces/penguin.jpg") L.empty
                       assertEqual "readChunks gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))
-       ])
+       , TestCase (do out <- readProcessChunks id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
+                      let result = unpackOutputs out
+                      assertEqual "readProcessChunks stdout stderr" ([], "stdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\n","stderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\n", []) result) ])
