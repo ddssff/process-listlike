@@ -30,7 +30,7 @@ import System.Process.Read.Chars (Chars(init, null, hPutStr, length), proc', for
 class Chars a => NonBlocking a where
   hGetNonBlocking :: Handle -> Int -> IO a
 
-data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving Show
+data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving (Eq, Show)
 
 -- | A fold function for the Output type, dispatches the value
 -- depending on the constructor.
