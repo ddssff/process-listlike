@@ -107,8 +107,8 @@ readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
 
       writeInput :: Handle -> IO ()
       writeInput inh = do
-        unless (null input) (hPutStr inh input >> hFlush inh) `catch` resourceVanished (\ _ -> return ())
-        hClose inh
+        (do unless (null input) (hPutStr inh input >> hFlush inh)
+            hClose inh) `catch` resourceVanished (\ _ -> return ())
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
@@ -179,8 +179,8 @@ readModifiedProcess modify cmd input = mask $ \restore -> do
              waitOut
 
       writeInput inh = do
-         unless (null input) (hPutStr inh input >> hFlush inh) `catch` resourceVanished (\ _ -> return ())
-         hClose inh
+         (do unless (null input) (hPutStr inh input >> hFlush inh)
+             hClose inh) `catch` resourceVanished (\ _ -> return ())
 
 forkWait :: IO a -> IO (IO a)
 forkWait a = do

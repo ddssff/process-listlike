@@ -106,8 +106,8 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     waitOut <- forkWait $ elements pid outh errh
 
     -- now write and flush any input
-    unless (null input) (hPutStr inh input >> hFlush inh) `catch` resourceVanished (\ _e -> return ())
-    hClose inh
+    (do unless (null input) (hPutStr inh input >> hFlush inh)
+        hClose inh) `catch` resourceVanished (\ _e -> return ())
 
     -- wait on the output
     waitOut
@@ -224,8 +224,8 @@ readProcessChunks' modify cmd input = mask $ \ restore -> do
     waitOut <- forkWait $ elements' pid outh errh
 
     -- now write and flush any input
-    unless (null input) (hPutStr inh input >> hFlush inh) `catch` resourceVanished (\ _e -> return ())
-    hClose inh
+    (do unless (null input) (hPutStr inh input >> hFlush inh)
+        hClose inh) `catch` resourceVanished (\ _e -> return ())
 
     -- wait on the output
     waitOut
