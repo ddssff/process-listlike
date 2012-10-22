@@ -103,7 +103,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ elements pid outh errh
+    waitOut <- forkWait $ elements pid (Just outh) (Just errh)
 
     -- now write and flush any input
     (do unless (null input) (hPutStr inh input >> hFlush inh)
@@ -116,10 +116,8 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 -- the stdout and stderr of the process.
 elements :: NonBlocking a => ProcessHandle -> Handle -> Handle -> IO [Output a]
 elements pid outh errh =
-    do outClosed <- hIsClosed outh
-       errClosed <- hIsClosed errh
-       case (outClosed, errClosed) of
-         (True, True) ->
+    do case (outh, errh) of
+         (Nothing, Nothing) ->
            -- EOF on both output descriptors, get exit code.  It can be
            -- argued that the result will always contain exactly one exit
            -- code if traversed to its end, because the only case of
@@ -132,10 +130,9 @@ elements pid outh errh =
          _ ->
            -- The available output has been processed, send input and read
            -- from the ready handles
-           do elems' <- ready uSecs (outh, errh)
-              case elems' of
-                [] -> return []
-                _ -> ((++) elems') <$> unsafeInterleaveIO (elements pid outh errh)
+           do (outh', errh', elems') <- ready uSecs (outh, errh)
+              more <- unsafeInterleaveIO (elements pid outh' errh')
+              return $ elems' ++ more
 
 data Readyness = Ready | Unready | Closed
 
@@ -154,13 +151,15 @@ hReady' h =
 -- none of the output descriptors are ready for reading the function
 -- sleeps and tries again.
 ready :: (NonBlocking a) =>
-         Int -> (Handle, Handle)
-      -> IO [Output a]
+         Int -> (Maybe Handle, Maybe Handle)
+      -> IO (Maybe Handle, Maybe Handle, [Output a])
 ready waitUSecs (outh, errh) =
     do
-      outReady <- hReady' outh
-      errReady <- hReady' errh
+      outReady <- maybe (return Closed) hReady' outh
+      errReady <- maybe (return Closed) hReady' errh
       case (outReady, errReady) of
+        (Closed, Closed) ->
+            return (Nothing, Nothing, [])
         -- Input handle closed and there are no ready output handles,
         -- wait a bit
         (Unready, Unready) ->
@@ -172,25 +171,26 @@ ready waitUSecs (outh, errh) =
             -- we have reached EOF on both descriptors, because at
             -- least one was ready and nextOut only returns [] for a
             -- ready file descriptor on EOF.
-            do out1 <- nextOut errh errReady Stderr
-               out2 <- nextOut outh outReady Stdout
-               return (out1 ++ out2)
+            do (errh', out1) <- nextOut errh errReady Stderr
+               (outh', out2) <- nextOut outh outReady Stdout
+               return (errh', outh', out1 ++ out2)
 
 -- | Return the next output element and the updated handle from a
 -- handle which is assumed ready.  If the handle is closed or unready,
 -- or we reach end of file an empty list of outputs is returned.
-nextOut :: NonBlocking a => Handle -> Readyness -> (a -> Output a) -> IO [Output a]
-nextOut h Ready constructor =	-- Perform a read
+nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO (Maybe Handle, [Output a])
+nextOut Nothing _ _ = return (Nothing, [])
+nextOut (Just h) Ready constructor =	-- Perform a read
     do
       a <- hGetNonBlocking h bufSize
       case length a of
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
         0 -> do hClose h
-                return []
+                return (Nothing, [])
         -- Got some output
-        _n -> return [constructor a]
-nextOut _ _ _ = return []	-- Handle is closed or not ready
+        _n -> return (Just h, [constructor a])
+nextOut h _ _ = return (h, [])	-- Handle is closed or not ready
 
 endOfFile :: (IOError -> IO a) -> IOError -> IO a
 endOfFile eeof e = if E.ioe_type e == E.EOF then eeof e else ioError e
