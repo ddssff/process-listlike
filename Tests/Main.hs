@@ -1,6 +1,6 @@
 module Main where
 
-import Control.Applicative ((<$>))
+--import Control.Applicative ((<$>))
 import Test.HUnit
 import System.Exit
 -- import Test.Changes
@@ -15,16 +15,17 @@ import qualified Data.ByteString.UTF8 as B
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Prelude hiding (length, concat)
-import System.IO.Unsafe (unsafePerformIO)
+--import System.IO.Unsafe (unsafePerformIO)
 import System.Process (CmdSpec(..))
 import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, readProcessChunks, keepStdout, Chars(..), discardStdout, Output(..))
 
+main :: IO ()
 main =
     do (c,st) <- runTestText putTextToShowS test1 -- (TestList (versionTests ++ sourcesListTests ++ dependencyTests ++ changesTests))
        putStrLn (st "")
        case (failures c) + (errors c) of
          0 -> return ()
-         n -> exitFailure
+         _ -> exitFailure
 
 test1 :: Test
 test1 =
