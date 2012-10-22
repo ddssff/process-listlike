@@ -114,7 +114,7 @@ readProcessChunks modify cmd input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> Handle -> Handle -> IO [Output a]
+elements :: NonBlocking a => ProcessHandle -> Maybe Handle -> Maybe Handle -> IO [Output a]
 elements pid outh errh =
     do case (outh, errh) of
          (Nothing, Nothing) ->
