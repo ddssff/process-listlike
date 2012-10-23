@@ -25,10 +25,15 @@ module System.Process.Read.Convenience
     , mapMaybeStdout
     , mapMaybeStderr
     , mapMaybeException
+    -- * Collectors
+    , collectOutputs
     , unpackOutputs
     -- * IO operations
     , ePutStr
     , ePutStrLn
+    , eMessage
+    , eMessageLn
+
     , foldException
     , foldChars
     , foldStdout
@@ -110,11 +115,10 @@ mapMaybeStderr f = mapMaybe (foldOutput (Just . Result) (Just . Stdout) f (Just 
 mapMaybeException :: Chars a => (IOError -> Maybe (Output a)) -> [Output a] -> [Output a]
 mapMaybeException f = mapMaybe (foldOutput (Just . Result) (Just . Stdout) (Just . Stderr) f)
 
-unpackOutputs :: forall a. Chars a => [Output a] -> ([ExitCode], String, String, [IOError])
-unpackOutputs xs =
-    (codes, toString outs, toString errs, exns)
+collectOutputs :: forall a. Chars a => [Output a] -> ([ExitCode], a, a, [IOError])
+collectOutputs xs =
+    foldOutputsR codefn outfn errfn exnfn result0 xs
     where
-      (codes, outs, errs, exns) = foldOutputsR codefn outfn errfn exnfn result0 xs
       result0 :: ([ExitCode], a, a, [IOError])
       result0 = ([], empty, empty, [])
       codefn :: ([ExitCode], a, a, [IOError]) -> ExitCode -> ([ExitCode], a, a, [IOError])
@@ -126,11 +130,23 @@ unpackOutputs xs =
       exnfn :: ([ExitCode], a, a, [IOError]) -> IOError -> ([ExitCode], a, a, [IOError])
       exnfn (codes, outs, errs, exns) exn = (codes, outs, errs, exn : exns)
 
+unpackOutputs :: forall a. Chars a => [Output a] -> ([ExitCode], String, String, [IOError])
+unpackOutputs xs =
+    (codes, toString outs, toString errs, exns)
+    where
+      (codes, outs, errs, exns) = collectOutputs xs
+
 ePutStr :: MonadIO m => String -> m ()
 ePutStr s = liftIO $ IO.hPutStr stderr s
 
 ePutStrLn :: MonadIO m => String -> m ()
 ePutStrLn s = liftIO $ IO.hPutStrLn stderr s
+
+eMessage :: MonadIO m => String -> a -> m a
+eMessage s x = ePutStr s >> return x
+
+eMessageLn :: MonadIO m => String -> a -> m a
+eMessageLn s x = ePutStrLn s >> return x
 
 foldException :: Chars a => (IOError -> IO (Output a)) -> [Output a] -> IO [Output a]
 foldException exnfn = mapM (foldOutput (return . Result) (return . Stdout) (return . Stderr) exnfn)
