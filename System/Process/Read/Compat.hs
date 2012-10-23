@@ -1,9 +1,8 @@
 -- | Some functions brought over from my obsolete progress packages.
 {-# LANGUAGE RankNTypes, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.Compat
-    ( prefixes
-    , echo
-    , doOutput'
+    ( echo
+{-
     , lazyCommandE
     , lazyCommandEF
     , lazyCommandF
@@ -14,6 +13,7 @@ module System.Process.Read.Compat
     , lazyProcessF
     , lazyProcessV
     , lazyProcess
+-}
     , oneResult
     , quieter
     , quieter'
@@ -25,45 +25,19 @@ module System.Process.Read.Compat
 
 import Control.Exception (evaluate)
 import Control.Monad.Trans (MonadIO)
-import qualified Data.ByteString.Lazy.Char8 as L
+--import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Time (NominalDiffTime, getCurrentTime, diffUTCTime)
 import System.Exit (ExitCode(..))
 import System.Process (CmdSpec(..), showCommandForUser)
 import System.Process.Read.Chars (Chars)
-import System.Process.Read.Convenience (ePutStrLn, doOutput, foldFailure, keepResult)
-import System.Process.Read.Chunks (NonBlocking, Output(..), readProcessChunks)
-
--- | Return the original stream of outputs zipped with one that has
--- had prefixes for stdout and stderr inserted.  For the prefixed
--- stream only, apply @map snd@.
-prefixes :: forall a. (a ~ L.ByteString) => a -> a -> [Output a] -> [(Output a, Output a)]
-prefixes opre epre output =
-    f True output
-    where
-      f :: Bool -> [Output a] -> [(Output a, Output a)]
-      f _ [] = []
-      f bol (x@(Stdout s) : xs) = let (s', bol') = doOutput' bol opre s in (x, Stdout s') : f bol' xs
-      f bol (x@(Stderr s) : xs) = let (s', bol') = doOutput' bol epre s in (x, Stderr s') : f bol' xs
-      f bol (x : xs) = (x, Stdout L.empty) : f bol xs
-
-doOutput' :: forall a. (a ~ L.ByteString) => Bool -> a -> a -> (a, Bool)
-doOutput' bol pre s =
-    let (a, b) = L.span (/= '\n') s in
-    if L.null a
-    then if L.null b
-         then (L.empty, bol)
-         else let x = (if bol then pre else L.empty)
-                  (s', bol') = doOutput' True pre (L.tail b) in
-              (L.concat [x, (L.pack "\n"), s'], bol')
-          -- There is some text before a possible newline
-    else let x = (if bol then L.append pre a else a)
-             (s', bol') = doOutput' False pre b in
-         (L.append x s', bol')
+import System.Process.Read.Convenience (ePutStrLn, keepResult)
+import System.Process.Read.Chunks (Output(..))
 
 echo :: CmdSpec -> IO () -> IO ()
 echo (RawCommand cmd args) io = ePutStrLn ("-> " ++ showCommandForUser cmd args) >> io
 echo (ShellCommand cmd) io = ePutStrLn ("-> " ++ cmd) >> io
 
+{-
 lazyCommandE :: NonBlocking a => String -> a -> IO [Output a]
 lazyCommandE cmd input = readProcessChunks id (ShellCommand cmd) input >>= doOutput
 lazyCommandEF :: NonBlocking a => String -> a -> IO [Output a]
@@ -81,6 +55,7 @@ lazyProcessF :: NonBlocking a => String -> [String] -> a -> IO [Output a]
 lazyProcessF cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput >>= foldFailure (\ n -> error ("Process failed with exit code " ++ show n))
 lazyProcessV :: NonBlocking a => String -> [String] -> a -> IO [Output a]
 lazyProcessV cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput
+-}
 
 oneResult :: Chars a => [Output a] -> ExitCode
 oneResult xs =
@@ -122,8 +97,10 @@ timeTask x =
        finish <- getCurrentTime
        return (result, diffUTCTime finish start)
 
+{-
 lazyCommand :: NonBlocking a => String -> a -> IO [Output a]
 lazyCommand cmd input = readProcessChunks id (ShellCommand cmd) input
 
 lazyProcess :: NonBlocking a => String -> [String] -> a -> IO [Output a]
 lazyProcess cmd args input = readProcessChunks id (RawCommand cmd args) input
+-}

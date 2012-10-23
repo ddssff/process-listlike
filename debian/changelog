@@ -1,3 +1,9 @@
+haskell-process-extras (0.4.4) unstable; urgency=low
+
+  * Replace all the lazyCommand*/lazyProcess* functions with runProcess*.
+
+ -- David Fox <dsf@seereason.com>  Tue, 23 Oct 2012 08:07:37 -0700
+
 haskell-process-extras (0.4.3) unstable; urgency=low
 
   * More cleanups in readProcessChunks

@@ -12,7 +12,7 @@ import System.Process (CmdSpec(..))
 import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, readProcessChunks,
                             keepStdout, Chars(..), discardStdout, Output(..), unpackOutputs)
 import System.Process.Read.Chunks (readProcessChunks')
-import Test.HUnit
+import Test.HUnit hiding (path)
 
 main :: IO ()
 main =

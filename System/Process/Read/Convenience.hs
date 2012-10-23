@@ -38,7 +38,7 @@ module System.Process.Read.Convenience
     , foldChars
     , foldStdout
     , foldStderr
-    , foldExit
+    , foldResult
     , foldSuccess
     , foldFailure
 
@@ -50,6 +50,7 @@ module System.Process.Read.Convenience
     , doAll
 
     , dots
+    , prefixed
     ) where
 
 import Control.Exception (throw)
@@ -62,6 +63,7 @@ import System.IO (stdout, stderr)
 import qualified System.IO as IO (hPutStr, hPutStrLn)
 import System.Process.Read.Chars (Chars(..))
 import System.Process.Read.Chunks (NonBlocking(..), Output(..), foldOutput, foldOutputsR)
+import System.Process.Read.Instances ()
 
 isResult :: Chars a => Output a -> Bool
 isResult = foldOutput (const True) (const False) (const False) (const False)
@@ -160,16 +162,16 @@ foldStdout outfn = foldChars outfn (return . Stderr)
 foldStderr :: Chars a => (a -> IO (Output a)) -> [Output a] -> IO [Output a]
 foldStderr errfn = foldChars (return . Stdout) errfn
 
-foldExit :: Chars a => (ExitCode -> IO (Output a)) -> [Output a] -> IO [Output a]
-foldExit codefn = mapM (foldOutput codefn (return . Stdout) (return . Stderr) (return . Exception))
+foldResult :: Chars a => (ExitCode -> IO (Output a)) -> [Output a] -> IO [Output a]
+foldResult codefn = mapM (foldOutput codefn (return . Stdout) (return . Stderr) (return . Exception))
 
 foldFailure :: Chars a => (Int -> IO (Output a)) -> [Output a] -> IO [Output a]
-foldFailure failfn = foldExit codefn
+foldFailure failfn = foldResult codefn
     where codefn (ExitFailure n) = failfn n
           codefn x = return (Result x)
 
 foldSuccess :: Chars a => IO (Output a) -> [Output a] -> IO [Output a]
-foldSuccess successfn = foldExit codefn
+foldSuccess successfn = foldResult codefn
     where codefn ExitSuccess = successfn
           codefn x = return (Result x)
 
@@ -187,7 +189,7 @@ doStderr = foldStderr (\ cs -> hPutStr stderr cs >> return (Stderr cs))
 
 -- | I don't see much use for this.
 doExit :: Chars a => [Output a] -> IO [Output a]
-doExit = foldExit (\ code -> exitWith code >> return (Result code))
+doExit = foldResult (\ code -> exitWith code >> return (Result code))
 
 doAll :: Chars a => [Output a] -> IO [Output a]
 doAll = mapM (foldOutput (\ code -> exitWith code >> return (Result code))
@@ -205,3 +207,36 @@ dots charsPerDot nDots outputs =
              when (count' > 0) (nDots count')
              xs' <- dots' rem' xs
              return (x : xs')
+
+-- | Output the stream with a prefix added at the beginning of each
+-- line of stdout and stderr.
+prefixed :: forall a. Chars a => String -> String -> [Output a] -> IO [Output a]
+prefixed opre epre output =
+    mapM (\ (old, new) -> doOutput [new] >> return old) (prefixes opre epre output)
+
+-- | Return the original stream of outputs zipped with one that has
+-- had prefixes for stdout and stderr inserted.  For the prefixed
+-- stream only, apply @map snd@.
+prefixes :: forall a. Chars a => String -> String -> [Output a] -> [(Output a, Output String)]
+prefixes opre epre output =
+    loop True output
+    where
+      loop :: Bool -> [Output a] -> [(Output a, Output String)]
+      loop _ [] = []
+      loop bol (x@(Stdout s) : xs) = let (s', bol') = step bol opre (toString s) in (x, Stdout s') : loop bol' xs
+      loop bol (x@(Stderr s) : xs) = let (s', bol') = step bol epre (toString s) in (x, Stderr s') : loop bol' xs
+      loop bol (x : xs) = (x, Stdout "") : loop bol xs
+
+      step :: Bool -> String -> String -> (String, Bool)
+      step bol pre s =
+          let (a, b) = span (/= '\n') s in
+          if a == ""
+          then if b == ""
+               then ("", bol)
+               else let x = (if bol then pre else "")
+                        (s', bol') = step True pre (tail b) in
+                    (x ++ "\n" ++ s', bol')
+          -- There is some text before a possible newline
+          else let x = (if bol then pre ++ a else a)
+                   (s', bol') = step False pre b in
+               (x ++ s', bol')
