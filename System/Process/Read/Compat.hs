@@ -9,6 +9,11 @@ module System.Process.Read.Compat
     , lazyCommandF
     , lazyCommandV
     , lazyCommand
+    , lazyProcessE
+    , lazyProcessEF
+    , lazyProcessF
+    , lazyProcessV
+    , lazyProcess
     , oneResult
     , quieter
     , quieter'
@@ -67,7 +72,15 @@ lazyCommandF :: NonBlocking a => String -> a -> IO [Output a]
 lazyCommandF cmd input = readProcessChunks id (ShellCommand cmd) input >>= doOutput >>= foldFailure (\ n -> error ("Command failed with exit code " ++ show n))
 lazyCommandV :: NonBlocking a => String -> a -> IO [Output a]
 lazyCommandV cmd input = readProcessChunks id (ShellCommand cmd) input >>= doOutput
--- lazyCommandP cmd input = readProcessChunks id (ShellCommand cmd) input >>= doOutput >>= doException
+
+lazyProcessE :: NonBlocking a => String -> [String] -> a -> IO [Output a]
+lazyProcessE cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput
+lazyProcessEF :: NonBlocking a => String -> [String] -> a -> IO [Output a]
+lazyProcessEF cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput >>= foldFailure (\ n -> error ("Process failed with exit code " ++ show n))
+lazyProcessF :: NonBlocking a => String -> [String] -> a -> IO [Output a]
+lazyProcessF cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput >>= foldFailure (\ n -> error ("Process failed with exit code " ++ show n))
+lazyProcessV :: NonBlocking a => String -> [String] -> a -> IO [Output a]
+lazyProcessV cmd args input = readProcessChunks id (RawCommand cmd args) input >>= doOutput
 
 oneResult :: Chars a => [Output a] -> ExitCode
 oneResult xs =
@@ -111,3 +124,6 @@ timeTask x =
 
 lazyCommand :: NonBlocking a => String -> a -> IO [Output a]
 lazyCommand cmd input = readProcessChunks id (ShellCommand cmd) input
+
+lazyProcess :: NonBlocking a => String -> [String] -> a -> IO [Output a]
+lazyProcess cmd args input = readProcessChunks id (RawCommand cmd args) input
