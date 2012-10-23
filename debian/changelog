@@ -1,3 +1,10 @@
+haskell-process-extras (0.4.5) unstable; urgency=low
+
+  * Add Verbosity module
+  * Print newline after last dot
+
+ -- David Fox <dsf@seereason.com>  Tue, 23 Oct 2012 10:33:25 -0700
+
 haskell-process-extras (0.4.4) unstable; urgency=low
 
   * Replace all the lazyCommand*/lazyProcess* functions with runProcess*.
