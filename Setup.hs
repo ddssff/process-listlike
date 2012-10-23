@@ -5,7 +5,11 @@ import System.Cmd
 import System.Exit
 
 main = defaultMainWithHooks simpleUserHooks {
-         postBuild = \ _ _ _ lbi -> runTestScript lbi
+         postBuild =
+             \ _ _ _ lbi ->
+                 case buildDir lbi of
+                   "dist-ghc/build" -> return ()
+                   _ -> runTestScript lbi
        , runTests = \ _ _ _ lbi -> runTestScript lbi
        }
 
