@@ -199,7 +199,7 @@ doAll = mapM (foldOutput (\ code -> exitWith code >> return (Result code))
 
 dots :: forall a. NonBlocking a => LengthType a -> (LengthType a -> IO ()) -> [Output a] -> IO [Output a]
 dots charsPerDot nDots outputs =
-    nDots 1 >> dots' 0 outputs
+    nDots 1 >> dots' 0 outputs >>= eMessage "\n"
     where
       dots' _ [] = nDots 1 >> return []
       dots' rem (x : xs) =

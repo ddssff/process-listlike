@@ -4,7 +4,8 @@
 {-# LANGUAGE FlexibleInstances, RankNTypes, ScopedTypeVariables, TypeFamilies, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 module System.Process.Read.Monad
-    ( runProcessQ
+    ( -- * Run processes with various types and amounts of feedback
+      runProcessQ
     , runProcessD
     , runProcessV
     , runProcessQF
@@ -12,22 +13,22 @@ module System.Process.Read.Monad
     , runProcessVF
     , runProcessQE
     , runProcessDE
+    -- * Process feedback managed by the VERBOSITY environment variable
     , runProcess
     , runProcessF
     ) where
 
-import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Control.Monad.State (StateT(runStateT), get, put)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Prelude hiding (print)
-import System.Environment (getEnv)
 import System.Exit (ExitCode(ExitFailure))
 import System.IO (hPutStrLn, stderr)
 import System.Process (CreateProcess, CmdSpec(RawCommand, ShellCommand), showCommandForUser)
 import qualified System.Process.Read.Chars as P
 import qualified System.Process.Read.Chunks as P
 import qualified System.Process.Read.Convenience as P
+import System.Process.Read.Verbosity (verbosity)
 
 -- | The state we need when running processes
 data RunState c
@@ -148,7 +149,7 @@ showCommand (ShellCommand cmd) = cmd
 -- | Select from the other runProcess* functions based on a verbosity level
 runProcess :: (P.NonBlocking c, MonadIO m) => (CreateProcess -> CreateProcess) -> CmdSpec -> c -> m [P.Output c]
 runProcess modify cmd input = liftIO $ 
-    try (getEnv "VERBOSITY" >>= return . read) >>= either (\ (_ :: SomeException) -> return 1) return >>= \ (v :: Int) ->
+    verbosity >>= \ v ->
     case v of
       _ | v <= 0 -> runProcessQ modify cmd input
       1 -> runProcessD modify cmd input
@@ -157,7 +158,7 @@ runProcess modify cmd input = liftIO $
 -- | A version of 'runProcess' that throws an exception on failure.
 runProcessF :: (P.NonBlocking c, MonadIO m) => (CreateProcess -> CreateProcess) -> CmdSpec -> c -> m [P.Output c]
 runProcessF modify cmd input = liftIO $
-    try (getEnv "VERBOSITY" >>= return . read) >>= either (\ (_ :: SomeException) -> return 1) return >>= \ (v :: Int) ->
+    verbosity >>= \ v ->
     case v of
       _ | v <= 0 -> runProcessQF modify cmd input
       1 -> runProcessDE modify cmd input

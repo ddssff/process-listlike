@@ -15,16 +15,10 @@ module System.Process.Read.Compat
     , lazyProcess
 -}
     , oneResult
-    , quieter
-    , quieter'
-    , q12
-    , qPutStrLn
-    , qPutStr
     , timeTask
     ) where
 
 import Control.Exception (evaluate)
-import Control.Monad.Trans (MonadIO)
 --import qualified Data.ByteString.Lazy.Char8 as L
 import Data.Time (NominalDiffTime, getCurrentTime, diffUTCTime)
 import System.Exit (ExitCode(..))
@@ -73,21 +67,6 @@ doFailure onFailure = mapM (\ x -> foldOutput doFailure ignore ignore ignore x >
 checkResult :: (Int -> IO ()) -> [Output L.ByteString] -> IO [Output L.ByteString]
 checkResult = doFailure
 -}
-
-quieter' :: (Int -> Int) -> a -> a
-quieter' = const id
-
-quieter :: (Int -> Int) -> a -> a
-quieter = const id
-
-q12 :: MonadIO m => String -> m a -> m a
-q12 msg x = qPutStrLn msg >> x
-
-qPutStrLn :: MonadIO m => String -> m ()
-qPutStrLn = ePutStrLn
-
-qPutStr :: MonadIO m => String -> m ()
-qPutStr = ePutStrLn
 
 -- |Run a task and return the elapsed time along with its result.
 timeTask :: IO a -> IO (a, NominalDiffTime)
