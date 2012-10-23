@@ -33,7 +33,7 @@ import System.Process.Read.Verbosity (verbosity)
 -- | The state we need when running processes
 data RunState c
     = RunState
-      { dpc :: Int  -- Output one dot per n characters of process output, 0 means no dots
+      { cpd :: Int  -- Output one dot per n characters of process output, 0 means no dots
       , trace :: Bool -- Echo the command line before starting, and after with the result code
       , echo :: Bool -- Echo the process output to the console
       , failEcho :: Bool -- Echo the process output if the result code is ExitFailure
@@ -42,7 +42,7 @@ data RunState c
       }
 
 defaultRunState :: P.Chars c => RunState c
-defaultRunState = RunState {dpc=0, trace=True, echo=False, failEcho=False, failExit=False, prefixes=Nothing}
+defaultRunState = RunState {cpd=0, trace=True, echo=False, failEcho=False, failExit=False, prefixes=Nothing}
 
 -- | The monad for running processes
 type RunT c = StateT (RunState c)
@@ -74,16 +74,16 @@ setPrefixes x = modifyRunState (\ (RunState a b c d e _) -> RunState a b c d e x
 
 runProcessM :: (P.NonBlocking c, MonadIO m) => (CreateProcess -> CreateProcess) -> CmdSpec -> c -> RunT c m [P.Output c]
 runProcessM f cmd input =
-    do RunState cpd echo print eprint exn pre <- get
+    do s <- get
        liftIO $ do
-         when echo (hPutStrLn stderr ("-> " ++ showCommand cmd))
+         when (trace s) (hPutStrLn stderr ("-> " ++ showCommand cmd))
          (out1 :: [P.Output c]) <- P.readProcessChunks f cmd input
-         (out2 :: [P.Output c]) <- maybe (return out1) (\ (sout, serr) -> P.prefixed sout serr out1) pre
-         (out3 :: [P.Output c]) <- (if print then P.doOutput else return) out2
-         (out4 :: [P.Output c]) <- if cpd > 0 then P.dots (fromIntegral cpd) (\ n -> P.hPutStr stderr (replicate (fromIntegral n) '.')) out3 else return out3
-         (out5 :: [P.Output c]) <- (if exn then P.foldFailure (\ n -> error (showCommand cmd ++ " -> ExitFailure " ++ show n)) else return) out4
-         (out6 :: [P.Output c]) <- (if eprint then P.foldFailure (\ n -> P.doOutput out5 >> return (P.Result (ExitFailure n))) else return) out5
-         (out7 :: [P.Output c]) <- (if echo then  P.foldResult (\ ec -> hPutStrLn stderr ("<- " ++ showCommand cmd ++ ": " ++ show ec) >> return (P.Result ec)) else return) out6
+         (out2 :: [P.Output c]) <- maybe (return out1) (\ (sout, serr) -> P.prefixed sout serr out1) (prefixes s)
+         (out3 :: [P.Output c]) <- (if trace s then P.doOutput else return) out2
+         (out4 :: [P.Output c]) <- if cpd s > 0 then P.dots (fromIntegral (cpd s)) (\ n -> P.hPutStr stderr (replicate (fromIntegral n) '.')) out3 else return out3
+         (out5 :: [P.Output c]) <- (if failExit s then P.foldFailure (\ n -> error (showCommand cmd ++ " -> ExitFailure " ++ show n)) else return) out4
+         (out6 :: [P.Output c]) <- (if failEcho s then P.foldFailure (\ n -> P.doOutput out5 >> return (P.Result (ExitFailure n))) else return) out5
+         (out7 :: [P.Output c]) <- (if trace s then  P.foldResult (\ ec -> hPutStrLn stderr ("<- " ++ showCommand cmd ++ ": " ++ show ec) >> return (P.Result ec)) else return) out6
          return out7
 
 c :: MonadIO m => RunT c m ()
