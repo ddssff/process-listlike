@@ -14,6 +14,7 @@ import qualified Data.Text.Lazy.IO as LT
 import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
 import qualified System.Process.Read.Chars as Chars
+import System.Process.Read.Chunks (NonBlocking(..))
 
 instance Chars.Chars String where
   type LengthType String = Int
@@ -84,3 +85,18 @@ instance Chars.Chars LT.Text where
   empty = LT.empty
   hPutStr = LT.hPutStr
   hGetContents = LT.hGetContents
+
+instance NonBlocking String where
+  hGetNonBlocking n h = (toString . B.concat . L.toChunks) <$> L.hGetNonBlocking n h
+  hGetSome h n = toString <$> B.hGetSome h n
+  toChunks = error "toChunks"
+
+instance NonBlocking B.ByteString where
+  hGetNonBlocking = B.hGetNonBlocking
+  hGetSome = B.hGetSome
+  toChunks = (: [])
+
+instance NonBlocking L.ByteString where
+  hGetNonBlocking = L.hGetNonBlocking
+  hGetSome h n = (L.fromChunks . (: [])) <$> B.hGetSome h (fromIntegral n)
+  toChunks = map (L.fromChunks . (: [])) . L.toChunks
