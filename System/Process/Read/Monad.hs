@@ -79,7 +79,7 @@ runProcessM f cmd input =
          when (trace s) (hPutStrLn stderr ("-> " ++ showCommand cmd))
          (out1 :: [P.Output c]) <- P.readProcessChunks f cmd input
          (out2 :: [P.Output c]) <- maybe (return out1) (\ (sout, serr) -> P.prefixed sout serr out1) (prefixes s)
-         (out3 :: [P.Output c]) <- (if trace s then P.doOutput else return) out2
+         (out3 :: [P.Output c]) <- (if echo s then P.doOutput else return) out2
          (out4 :: [P.Output c]) <- if cpd s > 0 then P.dots (fromIntegral (cpd s)) (\ n -> P.hPutStr stderr (replicate (fromIntegral n) '.')) out3 else return out3
          (out5 :: [P.Output c]) <- (if failExit s then P.foldFailure (\ n -> error (showCommand cmd ++ " -> ExitFailure " ++ show n)) else return) out4
          (out6 :: [P.Output c]) <- (if failEcho s then P.foldFailure (\ n -> P.doOutput out5 >> return (P.Result (ExitFailure n))) else return) out5
