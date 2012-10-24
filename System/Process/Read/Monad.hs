@@ -21,6 +21,7 @@ module System.Process.Read.Monad
 import Control.Monad (when)
 import Control.Monad.State (StateT(runStateT), get, put)
 import Control.Monad.Trans (MonadIO, liftIO)
+import Data.Maybe (isNothing)
 import Prelude hiding (print)
 import System.Exit (ExitCode(ExitFailure))
 import System.IO (hPutStrLn, stderr)
@@ -33,13 +34,15 @@ import System.Process.Read.Verbosity (verbosity)
 -- | The state we need when running processes
 data RunState c
     = RunState
-      { cpd :: Int  -- Output one dot per n characters of process output, 0 means no dots
-      , trace :: Bool -- Echo the command line before starting, and after with the result code
-      , echo :: Bool -- Echo the process output to the console
-      , failEcho :: Bool -- Echo the process output if the result code is ExitFailure
-      , failExit :: Bool -- Throw an IOError if the result code is ExitFailure
-      , prefixes :: Maybe (String, String) -- Prepend a prefix to the echoed lines of stdout and stderr
-      }
+      { cpd :: Int  -- ^ Output one dot per n characters of process output, 0 means no dots
+      , trace :: Bool -- ^ Echo the command line before starting, and after with the result code
+      , echo :: Bool -- ^ Echo the output as it is red, using the prefixes set below
+      , prefixes :: Maybe (String, String)
+      -- ^ Prepend a prefix to the echoed lines of stdout and stderr.
+      --  Special case for Just ("", ""), which means echo unmodified output.
+      , failEcho :: Bool -- ^ Echo the process output if the result code is ExitFailure
+      , failExit :: Bool -- ^ Throw an IOError if the result code is ExitFailure
+      } deriving (Show)
 
 defaultRunState :: P.Chars c => RunState c
 defaultRunState = RunState {cpd=0, trace=True, echo=False, failEcho=False, failExit=False, prefixes=Nothing}
@@ -54,23 +57,23 @@ withRunState s action =
 modifyRunState :: MonadIO m => (RunState c -> RunState c) -> RunT c m ()
 modifyRunState modify = get >>= put . modify
 
-dotsPerChar :: MonadIO m => Int -> RunT c m ()
-dotsPerChar x = modifyRunState (\ (RunState _ b c d e f) -> RunState x b c d e f) >> echoOutput False
+charsPerDot :: MonadIO m => Int -> RunT c m ()
+charsPerDot x = modifyRunState (\ s -> s {cpd = x})
 
 echoCommand :: MonadIO m => Bool -> RunT c m ()
-echoCommand x = modifyRunState (\ (RunState a _ c d e f) -> RunState a x c d e f)
-
-echoOutput :: MonadIO m => Bool -> RunT c m ()
-echoOutput x = modifyRunState (\ (RunState a b _ d e f) -> RunState a b x d e f) >> echoOnFailure False
+echoCommand x = modifyRunState (\ s -> s {trace = x})
 
 echoOnFailure :: MonadIO m => Bool -> RunT c m ()
-echoOnFailure x = modifyRunState (\ (RunState a b c _ e f) -> RunState a b c x e f) >> exceptionOnFailure True
+echoOnFailure x = modifyRunState (\ s -> s {failEcho = x})
 
 exceptionOnFailure :: MonadIO m => Bool -> RunT c m ()
-exceptionOnFailure x = modifyRunState (\ (RunState a b c d _ f) -> RunState a b c d x f)
+exceptionOnFailure x = modifyRunState (\ s -> s {failExit = x})
+
+echoOutput :: MonadIO m => Bool -> RunT c m ()
+echoOutput x = modifyRunState (\ s -> s {echo = x})
 
 setPrefixes :: MonadIO m => Maybe (String, String) -> RunT c m ()
-setPrefixes x = modifyRunState (\ (RunState a b c d e _) -> RunState a b c d e x)
+setPrefixes x = modifyRunState (\ s -> s {prefixes = x})
 
 runProcessM :: (P.NonBlocking c, MonadIO m) => (CreateProcess -> CreateProcess) -> CmdSpec -> c -> RunT c m [P.Output c]
 runProcessM f cmd input =
@@ -78,28 +81,30 @@ runProcessM f cmd input =
        liftIO $ do
          when (trace s) (hPutStrLn stderr ("-> " ++ showCommand cmd))
          (out1 :: [P.Output c]) <- P.readProcessChunks f cmd input
-         (out2 :: [P.Output c]) <- maybe (return out1) (\ (sout, serr) -> P.prefixed sout serr out1) (prefixes s)
-         (out3 :: [P.Output c]) <- (if echo s then P.doOutput else return) out2
-         (out4 :: [P.Output c]) <- if cpd s > 0 then P.dots (fromIntegral (cpd s)) (\ n -> P.hPutStr stderr (replicate (fromIntegral n) '.')) out3 else return out3
-         (out5 :: [P.Output c]) <- (if failExit s then P.foldFailure (\ n -> error (showCommand cmd ++ " -> ExitFailure " ++ show n)) else return) out4
-         (out6 :: [P.Output c]) <- (if failEcho s then P.foldFailure (\ n -> P.doOutput out5 >> return (P.Result (ExitFailure n))) else return) out5
+         (out2 :: [P.Output c]) <- if cpd s > 0 then P.dots (fromIntegral (cpd s)) (\ n -> P.hPutStr stderr (replicate (fromIntegral n) '.')) out1 else return out1
+         (out3 :: [P.Output c]) <- if echo s then doOutput (prefixes s) out2 else return out2
+         (out5 :: [P.Output c]) <- (if failExit s then P.foldFailure (\ n -> error (showCommand cmd ++ " -> ExitFailure " ++ show n)) else return) out3
+         (out6 :: [P.Output c]) <- (if failEcho s then P.foldFailure (\ n -> doOutput (prefixes s) out5 >> return (P.Result (ExitFailure n))) else return) out5
          (out7 :: [P.Output c]) <- (if trace s then  P.foldResult (\ ec -> hPutStrLn stderr ("<- " ++ showCommand cmd ++ ": " ++ show ec) >> return (P.Result ec)) else return) out6
          return out7
+
+doOutput :: P.Chars a => Maybe (String, String) -> [P.Output a] -> IO [P.Output a]
+doOutput prefixes out = maybe (P.doOutput out) (\ (sout, serr) -> P.prefixed sout serr out) prefixes >> return out
 
 c :: MonadIO m => RunT c m ()
 c = echoCommand True
 
 v :: MonadIO m => RunT c m ()
-v = echoOnFailure False >> setPrefixes (Just (" 1> ", " 2> ")) >> echoOutput False
+v = echoOutput True >> setPrefixes (Just (" 1> ", " 2> ")) >> echoOnFailure False
 
 d :: MonadIO m => RunT c m ()
-d = dotsPerChar 50 >> echoOutput False >> setPrefixes Nothing
+d = charsPerDot 50 >> echoOutput False
 
 f :: MonadIO m => RunT c m ()
 f = exceptionOnFailure True
 
 e :: MonadIO m => RunT c m ()
-e = exceptionOnFailure True >> echoOutput False >> echoOnFailure True >> setPrefixes (Just (" 1> ", " 2> "))
+e = echoOnFailure True >> setPrefixes (Just (" 1> ", " 2> ")) >> exceptionOnFailure True >> echoOutput False
 
 -- | No output.
 runProcessQ :: (P.NonBlocking c, MonadIO m) => (CreateProcess -> CreateProcess) -> CmdSpec -> c -> m [P.Output c]
