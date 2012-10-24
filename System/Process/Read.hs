@@ -4,7 +4,11 @@ module System.Process.Read
     , readModifiedProcess
     , readProcessWithExitCode
     , readProcess
+    , Output(..)
     , NonBlocking(..)
+    , foldOutput
+    , foldOutputsL
+    , foldOutputsR
     , readProcessChunks
     , readProcessChunks'
     ) where
