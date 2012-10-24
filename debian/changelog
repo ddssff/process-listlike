@@ -1,3 +1,9 @@
+haskell-process-extras (0.4.6) unstable; urgency=low
+
+  * Forked off process-progress.
+
+ -- David Fox <dsf@seereason.com>  Wed, 24 Oct 2012 11:31:34 -0700
+
 haskell-process-extras (0.4.5) unstable; urgency=low
 
   * Add Verbosity module
