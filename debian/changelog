@@ -1,3 +1,9 @@
+haskell-process-extras (0.4.7) unstable; urgency=low
+
+  * Add compatibility modules for the original process-extras.
+
+ -- David Fox <dsf@seereason.com>  Wed, 24 Oct 2012 14:46:59 -0700
+
 haskell-process-extras (0.4.6) unstable; urgency=low
 
   * Forked off process-progress.
