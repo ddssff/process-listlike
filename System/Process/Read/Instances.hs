@@ -14,7 +14,6 @@ import qualified Data.Text.Lazy.IO as LT
 import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
 import qualified System.Process.Read.Chars as Chars
-import qualified System.Process.Read.Chunks as Chunks
 
 instance Chars.Chars String where
   type LengthType String = Int
@@ -30,11 +29,6 @@ instance Chars.Chars String where
   hPutStr h s = L.hPutStr h (L.fromChunks [fromString s])
   hGetContents h = (toString . B.concat . L.toChunks) <$> L.hGetContents h
 
-instance Chunks.NonBlocking String where
-  hGetNonBlocking n h = (toString . B.concat . L.toChunks) <$> L.hGetNonBlocking n h
-  hGetSome h n = toString <$> B.hGetSome h n
-  toChunks = error "toChunks"
-
 instance Chars.Chars B.ByteString where
   type LengthType B.ByteString = Int
   init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
@@ -49,11 +43,6 @@ instance Chars.Chars B.ByteString where
   hPutStr = B.hPutStr
   hGetContents = B.hGetContents
 
-instance Chunks.NonBlocking B.ByteString where
-  hGetNonBlocking = B.hGetNonBlocking
-  hGetSome = B.hGetSome
-  toChunks = (: [])
-
 instance Chars.Chars L.ByteString where
   type LengthType L.ByteString = Int64
   init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
@@ -67,11 +56,6 @@ instance Chars.Chars L.ByteString where
   empty = L.empty
   hPutStr = L.hPutStr
   hGetContents = L.hGetContents
-
-instance Chunks.NonBlocking L.ByteString where
-  hGetNonBlocking = L.hGetNonBlocking
-  hGetSome h n = (L.fromChunks . (: [])) <$> B.hGetSome h (fromIntegral n)
-  toChunks = map (L.fromChunks . (: [])) . L.toChunks
 
 instance Chars.Chars T.Text where
   type LengthType T.Text = Int

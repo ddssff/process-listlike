@@ -9,9 +9,7 @@ import Prelude hiding (length, concat)
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (CmdSpec(..))
-import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, readProcessChunks,
-                            keepStdout, Chars(..), discardStdout, Output(..), unpackOutputs)
-import System.Process.Read.Chunks (readProcessChunks')
+import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, Chars(..))
 import Test.HUnit hiding (path)
 
 main :: IO ()
@@ -59,11 +57,6 @@ test1 =
                       (code1, pnm, err1) <- readModifiedProcessWithExitCode id (RawCommand "djpeg" []) jpg
                       out2 <- readModifiedProcess id (RawCommand "pnmfile" []) pnm
                       assertEqual "pnmfile2" (ExitSuccess, fromString "", 2192, 27661, fromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") (code1, err1, length jpg, length pnm, out2))
-       , TestLabel "pnmfile3" $
-         TestCase (do jpg <- L.readFile "Tests/penguin.jpg"
-                      pnm <- readProcessChunks id (RawCommand "djpeg" []) jpg >>= return . concat . keepStdout
-                      info <- readProcessChunks id (RawCommand "pnmfile" []) pnm >>= return . concat . keepStdout
-                      assertEqual "pnmfile3" (fromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") info)
        , TestLabel "file closed 1" $
          TestCase (do result <- readModifiedProcessWithExitCode id (RawCommand "Tests/Test4.hs" []) (fromString "a" :: B.ByteString)
                       assertEqual "file closed 1" (ExitSuccess, (fromString "a"), (fromString "Read one character: 'a'\n")) result)
@@ -76,29 +69,4 @@ test1 =
        , TestLabel "file closed 4" $
          TestCase (do result <- readModifiedProcessWithExitCode id (RawCommand "Tests/Test4.hs" []) "abcde"
                       assertEqual "file closed 4" (ExitSuccess, "a", "Read one character: 'a'\n") result)
-       , test2
-       , TestLabel "readProcessChunks stdout stderr" $
-         TestCase (do out <- readProcessChunks id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
-                      let result = unpackOutputs out
-                      assertEqual "readProcessChunks stdout stderr" ([ExitSuccess], "stdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\n","stderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\n", []) result)
-       , test3
-       , TestLabel "readProcessChunks' stdout stderr" $
-         TestCase (do out <- readProcessChunks' id (ShellCommand "yes | head -10 | while read i; do echo stdout; echo stderr 1>&2; done") L.empty
-                      let result = unpackOutputs out
-                      assertEqual "readProcessChunks' stdout stderr" ([ExitSuccess], "stdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\nstdout\n","stderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\nstderr\n", []) result)
-{-
-       , TestLabel "timed dot test" $
-         TestCase (do output <- readModifiedProcess id (ShellCommand "Tests/Test2.hs") "" >>= return . take 10
-                      assertEqual "timed dot test" ".........." output)
--}
        ])
-
-test2 :: Test
-test2 = TestLabel "readProcessChunks gzip" $
-        TestCase (do result <- readProcessChunks id (ShellCommand "gzip -v -f < Tests/penguin.jpg") L.empty
-                     assertEqual "readProcessChunks gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))
-
-test3 :: Test
-test3 = TestLabel "readProcessChunks' gzip'" $
-        TestCase (do result <- readProcessChunks' id (ShellCommand "gzip -v -f < Tests/penguin.jpg") L.empty
-                     assertEqual "readProcessChunks' gzip" [Stderr (fromString "  2.0%\n"),Result ExitSuccess] (discardStdout result))

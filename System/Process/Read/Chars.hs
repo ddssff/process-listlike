@@ -6,10 +6,6 @@ module System.Process.Read.Chars (
   readModifiedProcess,
   readProcessWithExitCode,
   readProcess,
-  ignoreResourceVanished,
-  proc',
-  forkWait,
-  resourceVanished
   ) where
 
 import Control.Concurrent
@@ -195,10 +191,6 @@ forkWait a = do
 resourceVanished :: (IOError -> IO a) -> IOError -> IO a
 resourceVanished epipe e = if ioe_type e == ResourceVanished then epipe e else ioError e
 
--- | Exception handler that ignores ResourceVanished. 
-ignoreResourceVanished :: IOError -> IO ()
-ignoreResourceVanished = resourceVanished ignore
-
 -- | Create an exception for a process that exited abnormally.
 mkError :: String -> CmdSpec -> Int -> IOError
 mkError prefix (RawCommand cmd args) r =
@@ -210,9 +202,6 @@ mkError prefix (ShellCommand cmd) r =
 
 force :: forall a. Chars a => a -> IO (LengthType a)
 force x = evaluate $ length $ x
-
-ignore :: IOError -> IO ()
-ignore _ = return ()
 
 proc' :: CmdSpec -> CreateProcess
 proc' (RawCommand cmd args) = proc cmd args
