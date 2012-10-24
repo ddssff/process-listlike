@@ -166,6 +166,6 @@ runProcessF modify cmd input = liftIO $
     verbosity >>= \ v ->
     case v of
       _ | v <= 0 -> runProcessQF modify cmd input
-      1 -> runProcessDE modify cmd input
-      2 -> runProcessQE modify cmd input
+      1 -> runProcessQE modify cmd input
+      2 -> runProcessDE modify cmd input
       _ -> runProcessVF modify cmd input
