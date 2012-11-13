@@ -1,3 +1,11 @@
+haskell-process-extras (0.4.8) unstable; urgency=low
+
+  * Modify the signature of the readModifiedProcess* functions
+    to take a CreateProcess rather than a function to modify a
+    CreateProcess.
+
+ -- David Fox <dsf@seereason.com>  Mon, 12 Nov 2012 18:37:40 -0800
+
 haskell-process-extras (0.4.7) unstable; urgency=low
 
   * Add compatibility modules for the original process-extras.

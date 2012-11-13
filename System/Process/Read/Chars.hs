@@ -16,7 +16,7 @@ import Prelude hiding (catch, null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO hiding (hPutStr, hGetContents)
 import qualified System.IO.Error as IO
-import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc, shell,
+import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc,
                        CmdSpec(RawCommand, ShellCommand), showCommandForUser,
                        createProcess, waitForProcess, terminateProcess)
 
@@ -51,16 +51,12 @@ class Integral (LengthType a) => Chars a where
 readModifiedProcessWithExitCode
     :: forall a.
        Chars a =>
-       (CreateProcess -> CreateProcess)
-                                -- ^ Modify CreateProcess with this
-    -> CmdSpec                  -- ^ command to run
+       CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
-readModifiedProcessWithExitCode modify cmd input = mask $ \restore -> do
-    let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
-
+readModifiedProcessWithExitCode p input = mask $ \restore -> do
     (Just inh, Just outh, Just errh, pid) <-
-        createProcess (modify' (proc' cmd))
+        createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
     flip onException
       (do hClose inh; hClose outh; hClose errh;
@@ -115,7 +111,7 @@ readProcessWithExitCode
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode id (RawCommand cmd args) input
+readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode (proc cmd args) input
 
 -- | Implementation of 'System.Process.readProcess' in terms of
 -- 'readModifiedProcess'.
@@ -125,7 +121,7 @@ readProcess
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
+readProcess cmd args = readModifiedProcess (proc cmd args)
 
 -- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
@@ -136,16 +132,12 @@ readProcess cmd args = readModifiedProcess id (RawCommand cmd args)
 --    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcess
     :: Chars a =>
-       (CreateProcess -> CreateProcess)
-                                -- ^ Modify CreateProcess with this
-    -> CmdSpec                  -- ^ command to run
+       CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readModifiedProcess modify cmd input = mask $ \restore -> do
-    let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit }
-
+readModifiedProcess p input = mask $ \restore -> do
     (Just inh, Just outh, _, pid) <-
-        createProcess (modify' (proc' cmd))
+        createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
 
     flip onException
       (do hClose inh; hClose outh;
@@ -159,7 +151,7 @@ readModifiedProcess modify cmd input = mask $ \restore -> do
 
       case ex of
         ExitSuccess   -> return out
-        ExitFailure r -> ioError (mkError "readModifiedProcess: " cmd r)
+        ExitFailure r -> ioError (mkError "readModifiedProcess: " (cmdspec p) r)
     where
       readLazy inh outh =
           do -- fork off a thread to start consuming stdout
@@ -202,7 +194,3 @@ mkError prefix (ShellCommand cmd) r =
 
 force :: forall a. Chars a => a -> IO (LengthType a)
 force x = evaluate $ length $ x
-
-proc' :: CmdSpec -> CreateProcess
-proc' (RawCommand cmd args) = proc cmd args
-proc' (ShellCommand cmd) = shell cmd
