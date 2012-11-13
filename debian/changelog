@@ -1,4 +1,4 @@
-haskell-process-extras (0.4.8) unstable; urgency=low
+haskell-process-extras (0.5) unstable; urgency=low
 
   * Modify the signature of the readModifiedProcess* functions
     to take a CreateProcess rather than a function to modify a

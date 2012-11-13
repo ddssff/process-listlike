@@ -87,15 +87,12 @@ foldOutputsR codefn outfn errfn exnfn result (x : xs) =
 -- 'System.Process.Read.readModifiedProcessWith', though the
 -- implementation is somewhat alarming.
 readProcessChunks :: (NonBlocking a) =>
-                     (CreateProcess -> CreateProcess)
-                  -> CmdSpec
+                     CreateProcess
                   -> a
                   -> IO [Output a]
-readProcessChunks modify cmd input = mask $ \ restore -> do
-  let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
-
+readProcessChunks p input = mask $ \ restore -> do
   (Just inh, Just outh, Just errh, pid) <-
-      createProcess (modify' (proc' cmd))
+      createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
   init input [inh, outh, errh]
 
@@ -205,15 +202,12 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 -- | A test version of readProcessChunks.
 -- Pipes code here: http://hpaste.org/76631
 readProcessChunks' :: (NonBlocking a) =>
-                      (CreateProcess -> CreateProcess)
-                   -> CmdSpec
+                      CreateProcess
                    -> a
                    -> IO [Output a]
-readProcessChunks' modify cmd input = mask $ \ restore -> do
-  let modify' p = (modify p) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
-
+readProcessChunks' p input = mask $ \ restore -> do
   (Just inh, Just outh, Just errh, pid) <-
-      createProcess (modify' (proc' cmd))
+      createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
   init input [inh, outh, errh]
 
