@@ -11,7 +11,6 @@ import Data.Word (Word8)
 import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
 import System.Process.Read.Chars (ListLikePlus(..))
-import System.Process.Read.Chunks (NonBlocking(..))
 
 instance ListLikePlus String Char where
   type LengthType String = Int
