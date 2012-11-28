@@ -1,7 +1,7 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.Chars (
-  Chars(..),
+  ListLikePlus(..),
   readModifiedProcessWithExitCode,
   readModifiedProcess,
   readProcessWithExitCode,
@@ -11,6 +11,9 @@ module System.Process.Read.Chars (
 import Control.Concurrent
 import Control.Exception (SomeException, onException, evaluate, catch, try, throwIO, mask)
 import Control.Monad
+import Data.ListLike (ListLike(..), ListLikeIO(..))
+import Data.ListLike.Text.Text ()
+import Data.ListLike.Text.TextLazy ()
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (catch, null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -21,36 +24,27 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc,
                        createProcess, waitForProcess, terminateProcess)
 
 -- | Class of types which can be used as the input and outputs of the process functions.
-class Integral (LengthType a) => Chars a where
+class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   type LengthType a
   binary :: a -> [Handle] -> IO ()
   -- ^ This should call 'hSetBinaryMode' on each handle if a is a
   -- ByteString type, so that it doesn't attempt to decode the text
   -- using the current locale.
   lazy :: a -> Bool
-  length :: a -> LengthType a
-  null :: a -> Bool
-  hPutStr :: Handle -> a -> IO ()
-  hGetContents :: Handle -> IO a
-
-  append :: a -> a -> a
-  concat :: [a] -> a
-  toString :: a -> String
-  fromString :: String -> a
-  empty :: a
+  length' :: a -> LengthType a
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' with a few
 -- generalizations:
 --
---    1. The input and outputs can be any instance of 'Chars'.
+--    1. The input and outputs can be any instance of 'ListLikePlus'.
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
 --    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcessWithExitCode
-    :: forall a.
-       Chars a =>
+    :: forall a c.
+       ListLikePlus a c =>
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
@@ -106,7 +100,7 @@ readModifiedProcessWithExitCode p input = mask $ \restore -> do
 -- 'System.Process.readProcessWithExitCode' in terms of
 -- 'readModifiedProcessWithExitCode'.
 readProcessWithExitCode
-    :: Chars a =>
+    :: ListLikePlus a c =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
@@ -116,7 +110,7 @@ readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode (proc c
 -- | Implementation of 'System.Process.readProcess' in terms of
 -- 'readModifiedProcess'.
 readProcess
-    :: Chars a =>
+    :: ListLikePlus a c =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
@@ -125,13 +119,13 @@ readProcess cmd args = readModifiedProcess (proc cmd args)
 
 -- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
---    1. The input and outputs can be any instance of 'Chars'.
+--    1. The input and outputs can be any instance of 'ListLikePlus'.
 --
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
 --    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
 readModifiedProcess
-    :: Chars a =>
+    :: ListLikePlus a c =>
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
@@ -192,5 +186,5 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
-force :: forall a. Chars a => a -> IO (LengthType a)
-force x = evaluate $ length $ x
+force :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
+force x = evaluate $ length' $ x

@@ -1,5 +1,5 @@
 module System.Process.Read
-    ( Chars(..)
+    ( ListLikePlus(..)
     , readModifiedProcessWithExitCode
     , readModifiedProcess
     , readProcessWithExitCode

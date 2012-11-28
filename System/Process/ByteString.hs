@@ -10,11 +10,11 @@ import System.Exit (ExitCode)
 import System.Process (CreateProcess)
 import qualified System.Process.Read as R
 
-readProcess :: R.Chars a => FilePath -> [String] -> a -> IO a
+readProcess :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
-readProcessWithExitCode :: R.Chars a => FilePath -> [String] -> a -> IO (ExitCode, a, a)
+readProcessWithExitCode :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO (ExitCode, a, a)
 readProcessWithExitCode = R.readProcessWithExitCode
-readModifiedProcess :: R.Chars a => CreateProcess -> a -> IO a
+readModifiedProcess :: R.ListLikePlus a c => CreateProcess -> a -> IO a
 readModifiedProcess = R.readModifiedProcess
-readModifiedProcessWithExitCode :: R.Chars a => CreateProcess -> a -> IO (ExitCode, a, a)
+readModifiedProcessWithExitCode :: R.ListLikePlus a c => CreateProcess -> a -> IO (ExitCode, a, a)
 readModifiedProcessWithExitCode = R.readModifiedProcessWithExitCode

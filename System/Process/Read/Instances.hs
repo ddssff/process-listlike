@@ -1,102 +1,58 @@
-{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, TypeFamilies, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module System.Process.Read.Instances where
 
 import Control.Applicative ((<$>))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import Data.ByteString.UTF8 (toString, fromString)
+import Data.ByteString.UTF8 (toString)
 import Data.Int (Int64)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.IO as LT
+import Data.Word (Word8)
 import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
-import qualified System.Process.Read.Chars as Chars
+import System.Process.Read.Chars (ListLikePlus(..))
 import System.Process.Read.Chunks (NonBlocking(..))
 
-instance Chars.Chars String where
+instance ListLikePlus String Char where
   type LengthType String = Int
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
   lazy _ = True
-  length = length
-  null = null
-  append = (++)
-  concat = concat
-  fromString = id
-  toString = id
-  empty = ""
-  hPutStr h s = L.hPutStr h (L.fromChunks [fromString s])
-  hGetContents h = (toString . B.concat . L.toChunks) <$> L.hGetContents h
+  length' = length
 
-instance Chars.Chars B.ByteString where
+instance ListLikePlus B.ByteString Word8 where
   type LengthType B.ByteString = Int
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = False
-  length = B.length
-  null = B.null
-  append = B.append
-  concat = B.concat
-  fromString = fromString
-  toString = toString
-  empty = B.empty
-  hPutStr = B.hPutStr
-  hGetContents = B.hGetContents
+  length' = B.length
 
-instance Chars.Chars L.ByteString where
+instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = True
-  length = L.length
-  null = L.null
-  append = L.append
-  concat = L.concat
-  fromString = L.fromChunks . (: []) . fromString
-  toString = toString . B.concat . L.toChunks
-  empty = L.empty
-  hPutStr = L.hPutStr
-  hGetContents = L.hGetContents
+  length' = L.length
 
-instance Chars.Chars T.Text where
+instance ListLikePlus T.Text Char where
   type LengthType T.Text = Int
   binary _ _ = return ()
   lazy _ = False
-  length = T.length
-  null = T.null
-  append = T.append
-  concat = T.concat
-  fromString = T.pack
-  toString = T.unpack
-  empty = T.empty
-  hPutStr = T.hPutStr
-  hGetContents = T.hGetContents
+  length' = T.length
 
-instance Chars.Chars LT.Text where
+instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   binary _ _ = return ()
   lazy _ = True
-  length = LT.length
-  null = LT.null
-  append = LT.append
-  concat = LT.concat
-  fromString = LT.pack
-  toString = LT.unpack
-  empty = LT.empty
-  hPutStr = LT.hPutStr
-  hGetContents = LT.hGetContents
+  length' = LT.length
 
-instance NonBlocking String where
-  hGetNonBlocking n h = (toString . B.concat . L.toChunks) <$> L.hGetNonBlocking n h
+instance NonBlocking String Char where
   hGetSome h n = toString <$> B.hGetSome h n
   toChunks = error "toChunks"
 
-instance NonBlocking B.ByteString where
-  hGetNonBlocking = B.hGetNonBlocking
+instance NonBlocking B.ByteString Word8 where
   hGetSome = B.hGetSome
   toChunks = (: [])
 
-instance NonBlocking L.ByteString where
-  hGetNonBlocking = L.hGetNonBlocking
+instance NonBlocking L.ByteString Word8 where
   hGetSome h n = (L.fromChunks . (: [])) <$> B.hGetSome h (fromIntegral n)
   toChunks = map (L.fromChunks . (: [])) . L.toChunks

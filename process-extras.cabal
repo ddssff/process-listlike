@@ -37,6 +37,8 @@ Library
     bytestring,
     deepseq,
     HUnit,
+    ListLike,
+    listlike-instances,
     process,
     text,
     time,

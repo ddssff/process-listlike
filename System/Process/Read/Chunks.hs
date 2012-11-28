@@ -3,7 +3,7 @@
 -- Output.  Unlike readProcessWithExitCode, this preserves the order
 -- in which the chunks of text were written by the process.
 
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses, ScopedTypeVariables #-}
 module System.Process.Read.Chunks (
   NonBlocking(..),
   Output(..),
@@ -17,6 +17,7 @@ module System.Process.Read.Chunks (
 import Control.Concurrent (forkIO, threadDelay, MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (onException, catch, mask, try, throwIO, SomeException)
 import Control.Monad (unless)
+import Data.ListLike (ListLike(..), ListLikeIO(..))
 import qualified GHC.IO.Exception as E
 import GHC.IO.Exception (IOErrorType(ResourceVanished), IOException(ioe_type))
 import Prelude hiding (catch, null, length, rem)
@@ -25,13 +26,12 @@ import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
 import System.IO.Error (mkIOError)
 import System.IO.Unsafe (unsafeInterleaveIO)
-import System.Process (CreateProcess(..), StdStream(CreatePipe), ProcessHandle, proc, shell,
-                       CmdSpec(RawCommand, ShellCommand), createProcess, waitForProcess, terminateProcess)
-import System.Process.Read.Chars (Chars(binary, null, hPutStr, length, hGetContents), LengthType)
+import System.Process (CreateProcess(..), StdStream(CreatePipe), ProcessHandle,
+                       createProcess, waitForProcess, terminateProcess)
+import System.Process.Read.Chars (ListLikePlus (binary), LengthType)
 
 -- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
-class Chars a => NonBlocking a where
-  hGetNonBlocking :: Handle -> Int -> IO a
+class ListLikePlus a c => NonBlocking a c where
   hGetSome :: Handle -> LengthType a -> IO a
   toChunks :: a -> [a]
 
@@ -39,7 +39,7 @@ data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError derivi
 
 -- | A fold function for the Output type, dispatches the value
 -- depending on the constructor.
-foldOutput :: Chars a =>
+foldOutput :: ListLikePlus a c =>
               (ExitCode -> b)
            -> (a -> b)
            -> (a -> b)
@@ -51,7 +51,7 @@ foldOutput _ outfn _ _ (Stdout out) = outfn out
 foldOutput _ _ errfn _ (Stderr err) = errfn err
 foldOutput _ _ _ exnfn (Exception exn) = exnfn exn
 
-foldOutputsL :: Chars a =>
+foldOutputsL :: ListLikePlus a c =>
                 (b -> ExitCode -> b)
              -> (b -> a -> b)
              -> (b -> a -> b)
@@ -66,7 +66,7 @@ foldOutputsL codefn outfn errfn exnfn result (x : xs) =
     -- Pretty sure this is equivalent:
     -- foldl (\ r x -> foldOutput (codefn r) (outfn r) (errfn r) (exnfn r) x) result xs
 
-foldOutputsR :: forall a b. Chars a =>
+foldOutputsR :: forall a b c. ListLikePlus a c =>
                 (b -> ExitCode -> b)
              -> (b -> a -> b)
              -> (b -> a -> b)
@@ -86,7 +86,7 @@ foldOutputsR codefn outfn errfn exnfn result (x : xs) =
 -- exxception that might occur.  Its interface is similar to
 -- 'System.Process.Read.readModifiedProcessWith', though the
 -- implementation is somewhat alarming.
-readProcessChunks :: (NonBlocking a) =>
+readProcessChunks :: (NonBlocking a c) =>
                      CreateProcess
                   -> a
                   -> IO [Output a]
@@ -111,7 +111,7 @@ readProcessChunks p input = mask $ \ restore -> do
 
 -- | Take the info returned by 'createProcess' and gather and return
 -- the stdout and stderr of the process.
-elements :: NonBlocking a => ProcessHandle -> Maybe Handle -> Maybe Handle -> IO [Output a]
+elements :: NonBlocking a c => ProcessHandle -> Maybe Handle -> Maybe Handle -> IO [Output a]
 elements pid outh errh =
     do case (outh, errh) of
          (Nothing, Nothing) ->
@@ -147,7 +147,7 @@ hReady' h =
 -- | Wait until at least one handle is ready and then read output.  If
 -- none of the output descriptors are ready for reading the function
 -- sleeps and tries again.
-ready :: (NonBlocking a) =>
+ready :: (NonBlocking a c) =>
          Int -> Maybe Handle -> Maybe Handle
       -> IO (Maybe Handle, Maybe Handle, [Output a])
 ready waitUSecs outh errh =
@@ -175,7 +175,7 @@ ready waitUSecs outh errh =
 -- | Return the next output element and the updated handle from a
 -- handle which is assumed ready.  If the handle is closed or unready,
 -- or we reach end of file an empty list of outputs is returned.
-nextOut :: NonBlocking a => Maybe Handle -> Readyness -> (a -> Output a) -> IO (Maybe Handle, [Output a])
+nextOut :: NonBlocking a c => Maybe Handle -> Readyness -> (a -> Output a) -> IO (Maybe Handle, [Output a])
 nextOut Nothing _ _ = return (Nothing, [])
 nextOut (Just h) Ready constructor =	-- Perform a read
    do -- We can call hGetSome because we know this handle is ready for reading.
@@ -201,7 +201,7 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | A test version of readProcessChunks.
 -- Pipes code here: http://hpaste.org/76631
-readProcessChunks' :: (NonBlocking a) =>
+readProcessChunks' :: (NonBlocking a c) =>
                       CreateProcess
                    -> a
                    -> IO [Output a]
@@ -225,7 +225,7 @@ readProcessChunks' p input = mask $ \ restore -> do
     waitOut
 
 -- | An idea for a replacement of elements
-elements' :: forall a. NonBlocking a => ProcessHandle -> Handle -> Handle -> IO [Output a]
+elements' :: forall a c. NonBlocking a c => ProcessHandle -> Handle -> Handle -> IO [Output a]
 elements' pid outh errh = do
   res <- newEmptyMVar
   -- We use Exception EOF to indicate that we reached EOF on one
@@ -256,6 +256,8 @@ forkWait a = do
 resourceVanished :: (IOError -> IO a) -> IOError -> IO a
 resourceVanished epipe e = if ioe_type e == ResourceVanished then epipe e else ioError e
 
+{-
 proc' :: CmdSpec -> CreateProcess
 proc' (RawCommand cmd args) = proc cmd args
 proc' (ShellCommand cmd) = shell cmd
+-}
