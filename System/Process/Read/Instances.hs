@@ -2,10 +2,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module System.Process.Read.Instances where
 
-import Control.Applicative ((<$>))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import Data.ByteString.UTF8 (toString)
 import Data.Int (Int64)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
@@ -44,15 +42,3 @@ instance ListLikePlus LT.Text Char where
   binary _ _ = return ()
   lazy _ = True
   length' = LT.length
-
-instance NonBlocking String Char where
-  hGetSome h n = toString <$> B.hGetSome h n
-  toChunks = error "toChunks"
-
-instance NonBlocking B.ByteString Word8 where
-  hGetSome = B.hGetSome
-  toChunks = (: [])
-
-instance NonBlocking L.ByteString Word8 where
-  hGetSome h n = (L.fromChunks . (: [])) <$> B.hGetSome h (fromIntegral n)
-  toChunks = map (L.fromChunks . (: [])) . L.toChunks

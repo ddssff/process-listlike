@@ -1,3 +1,11 @@
+haskell-process-extras (0.6) unstable; urgency=low
+
+  * Use the ListLike and ListLikeIO classes as the basis of the
+    class of types the readProcess functions use.
+  * Move the Chunk code to the process-progress package.
+
+ -- David Fox <dsf@seereason.com>  Wed, 28 Nov 2012 08:17:47 -0800
+
 haskell-process-extras (0.5) unstable; urgency=low
 
   * Modify the signature of the readModifiedProcess* functions
