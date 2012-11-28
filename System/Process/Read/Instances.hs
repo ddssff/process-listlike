@@ -18,7 +18,7 @@ import System.Process.Read.Chunks (NonBlocking(..))
 
 instance Chars.Chars String where
   type LengthType String = Int
-  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
   lazy _ = True
   length = length
   null = null
@@ -32,7 +32,7 @@ instance Chars.Chars String where
 
 instance Chars.Chars B.ByteString where
   type LengthType B.ByteString = Int
-  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = False
   length = B.length
   null = B.null
@@ -46,7 +46,7 @@ instance Chars.Chars B.ByteString where
 
 instance Chars.Chars L.ByteString where
   type LengthType L.ByteString = Int64
-  init _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = True
   length = L.length
   null = L.null
@@ -60,7 +60,7 @@ instance Chars.Chars L.ByteString where
 
 instance Chars.Chars T.Text where
   type LengthType T.Text = Int
-  init _ _ = return ()
+  binary _ _ = return ()
   lazy _ = False
   length = T.length
   null = T.null
@@ -74,7 +74,7 @@ instance Chars.Chars T.Text where
 
 instance Chars.Chars LT.Text where
   type LengthType LT.Text = Int64
-  init _ _ = return ()
+  binary _ _ = return ()
   lazy _ = True
   length = LT.length
   null = LT.null

@@ -19,7 +19,7 @@ import Control.Exception (onException, catch, mask, try, throwIO, SomeException)
 import Control.Monad (unless)
 import qualified GHC.IO.Exception as E
 import GHC.IO.Exception (IOErrorType(ResourceVanished), IOException(ioe_type))
-import Prelude hiding (catch, null, length, init, rem)
+import Prelude hiding (catch, null, length, rem)
 import qualified Prelude
 import System.Exit (ExitCode)
 import System.IO hiding (hPutStr, hGetContents)
@@ -27,7 +27,7 @@ import System.IO.Error (mkIOError)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (CreateProcess(..), StdStream(CreatePipe), ProcessHandle, proc, shell,
                        CmdSpec(RawCommand, ShellCommand), createProcess, waitForProcess, terminateProcess)
-import System.Process.Read.Chars (Chars(init, null, hPutStr, length, hGetContents), LengthType)
+import System.Process.Read.Chars (Chars(binary, null, hPutStr, length, hGetContents), LengthType)
 
 -- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
 class Chars a => NonBlocking a where
@@ -94,7 +94,7 @@ readProcessChunks p input = mask $ \ restore -> do
   (Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
-  init input [inh, outh, errh]
+  binary input [inh, outh, errh]
 
   flip onException
     (do hClose inh; hClose outh; hClose errh;
@@ -209,7 +209,7 @@ readProcessChunks' p input = mask $ \ restore -> do
   (Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
-  init input [inh, outh, errh]
+  binary input [inh, outh, errh]
 
   flip onException
     (do hClose inh; hClose outh; hClose errh;

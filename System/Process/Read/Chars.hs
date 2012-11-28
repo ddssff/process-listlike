@@ -23,7 +23,7 @@ import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc,
 -- | Class of types which can be used as the input and outputs of the process functions.
 class Integral (LengthType a) => Chars a where
   type LengthType a
-  init :: a -> [Handle] -> IO ()
+  binary :: a -> [Handle] -> IO ()
   -- ^ This should call 'hSetBinaryMode' on each handle if a is a
   -- ByteString type, so that it doesn't attempt to decode the text
   -- using the current locale.
