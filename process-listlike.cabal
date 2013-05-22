@@ -1,5 +1,5 @@
 Name:               process-listlike
-Version:            0.6
+Version:            0.6.1
 Synopsis:           Enhanced version of process-extras
 Description:        Extra functionality for the Process library
                     <http://hackage.haskell.org/package/process>.
@@ -25,6 +25,7 @@ Library
     System.Process.Read.Instances
     System.Process.ByteString
     System.Process.ByteString.Lazy
+    System.Process.String
     System.Process.Text
     System.Process.Text.Lazy
 

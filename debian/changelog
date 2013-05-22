@@ -1,3 +1,9 @@
+haskell-process-listlike (0.6.1) unstable; urgency=low
+
+  * Add System.Process.String.
+
+ -- David Fox <dsf@seereason.com>  Wed, 22 May 2013 11:22:06 -0700
+
 haskell-process-listlike (0.6) unstable; urgency=low
 
   * Use the ListLike and ListLikeIO classes as the basis of the
