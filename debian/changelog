@@ -1,4 +1,4 @@
-haskell-process-extras (0.6) unstable; urgency=low
+haskell-process-listlike (0.6) unstable; urgency=low
 
   * Use the ListLike and ListLikeIO classes as the basis of the
     class of types the readProcess functions use.
