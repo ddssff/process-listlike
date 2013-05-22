@@ -11,15 +11,13 @@ Maintainer:         David Fox <dsf@seereason.com>
 Category:           System
 Build-type:         Simple
 Cabal-version:      >=1.8
-Extra-source-files:
-  README.md
 
 source-repository head
   Type:             darcs
   Location:         http://src.seereason.com/process-extras
 
 Library
-  ghc-options:      -Wall -O2 -threaded
+  ghc-options:      -Wall -O2
 
   Exposed-modules:
     System.Process.Read
@@ -55,4 +53,3 @@ Executable tests
     text,
     utf8-string,
     unix
-
