@@ -9,13 +9,13 @@ module System.Process.Read.Chars (
   ) where
 
 import Control.Concurrent
-import Control.Exception (SomeException, onException, evaluate, catch, try, throwIO, mask)
+import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask)
 import Control.Monad
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
-import Prelude hiding (catch, null, length)
+import Prelude hiding (null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO hiding (hPutStr, hGetContents)
 import qualified System.IO.Error as IO
@@ -94,7 +94,7 @@ readCreateProcessWithExitCode p input = mask $ \restore -> do
       writeInput :: Handle -> IO ()
       writeInput inh = do
         (do unless (null input) (hPutStr inh input >> hFlush inh)
-            hClose inh) `catch` resourceVanished (\ _ -> return ())
+            hClose inh) `E.catch` resourceVanished (\ _ -> return ())
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
@@ -162,7 +162,7 @@ readCreateProcess p input = mask $ \restore -> do
 
       writeInput inh = do
          (do unless (null input) (hPutStr inh input >> hFlush inh)
-             hClose inh) `catch` resourceVanished (\ _ -> return ())
+             hClose inh) `E.catch` resourceVanished (\ _ -> return ())
 
 forkWait :: IO a -> IO (IO a)
 forkWait a = do

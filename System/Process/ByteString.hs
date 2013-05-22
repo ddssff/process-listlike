@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.ByteString
     ( readProcess
@@ -6,15 +7,16 @@ module System.Process.ByteString
     , readCreateProcessWithExitCode
     ) where
 
+import Data.ByteString.Char8 (ByteString)
 import System.Exit (ExitCode)
 import System.Process (CreateProcess)
 import qualified System.Process.Read as R
 
-readProcess :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO a
+readProcess :: (a ~ ByteString) => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
-readProcessWithExitCode :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO (ExitCode, a, a)
+readProcessWithExitCode :: (a ~ ByteString) => FilePath -> [String] -> a -> IO (ExitCode, a, a)
 readProcessWithExitCode = R.readProcessWithExitCode
-readCreateProcess :: R.ListLikePlus a c => CreateProcess -> a -> IO a
+readCreateProcess :: (a ~ ByteString) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
-readCreateProcessWithExitCode :: R.ListLikePlus a c => CreateProcess -> a -> IO (ExitCode, a, a)
+readCreateProcessWithExitCode :: (a ~ ByteString) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode

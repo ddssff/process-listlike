@@ -1,22 +1,21 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
-module System.Process.Text
+module System.Process.String
     ( readProcess
     , readProcessWithExitCode
     , readCreateProcess
     , readCreateProcessWithExitCode
     ) where
 
-import Data.Text (Text)
 import System.Exit (ExitCode)
 import System.Process (CreateProcess)
 import qualified System.Process.Read as R
 
-readProcess :: (a ~ Text) => FilePath -> [String] -> a -> IO a
+readProcess :: (a ~ String) => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
-readProcessWithExitCode :: (a ~ Text) => FilePath -> [String] -> a -> IO (ExitCode, a, a)
+readProcessWithExitCode :: (a ~ String) => FilePath -> [String] -> a -> IO (ExitCode, a, a)
 readProcessWithExitCode = R.readProcessWithExitCode
-readCreateProcess :: (a ~ Text) => CreateProcess -> a -> IO a
+readCreateProcess :: (a ~ String) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
-readCreateProcessWithExitCode :: (a ~ Text) => CreateProcess -> a -> IO (ExitCode, a, a)
+readCreateProcessWithExitCode :: (a ~ String) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
