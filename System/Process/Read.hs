@@ -1,7 +1,7 @@
 module System.Process.Read
     ( ListLikePlus(..)
-    , readModifiedProcessWithExitCode
-    , readModifiedProcess
+    , readCreateProcessWithExitCode
+    , readCreateProcess
     , readProcessWithExitCode
     , readProcess
     ) where

@@ -17,15 +17,15 @@ main =
 test1 =
     hPutStrLn stderr "=== test1 ===" >>
     B.readFile "/usr/share/pixmaps/faces/penguin.jpg" >>=
-    readModifiedProcess id (RawCommand "djpeg" []) >>=
-    readModifiedProcess id (RawCommand "pnmfile" []) >>= \ out ->
+    readCreateProcess id (RawCommand "djpeg" []) >>=
+    readCreateProcess id (RawCommand "pnmfile" []) >>= \ out ->
     putStrLn ("out: " ++ show out)
 
 test2 =
     hPutStrLn stderr "=== test2 ===" >>
     B.readFile "/usr/share/pixmaps/faces/penguin.jpg" >>=
-    readModifiedProcessWithExitCode id (RawCommand "djpeg" []) >>= explain >>=
-    readModifiedProcess id (RawCommand "pnmfile" []) >>= \ out ->
+    readCreateProcessWithExitCode id (RawCommand "djpeg" []) >>= explain >>=
+    readCreateProcess id (RawCommand "pnmfile" []) >>= \ out ->
     putStrLn ("out: " ++ show out)
     where
       explain (code, out, err) =
@@ -36,11 +36,11 @@ test3 =
     do hPutStrLn stderr "=== test3 ==="
        jpg <- L.readFile "/usr/share/pixmaps/faces/penguin.jpg"
        hPutStrLn stderr ("jpg length:" ++ show (L.length jpg))
-       (code1, pnm, err1) <- readModifiedProcessWithExitCode id (RawCommand "djpeg" []) jpg
+       (code1, pnm, err1) <- readCreateProcessWithExitCode id (RawCommand "djpeg" []) jpg
        hPutStrLn stderr ("pnm length: " ++ show (L.length pnm))
        pnm' <- explain (code1, pnm, err1)
        hPutStrLn stderr "pnm'"
-       out <- readModifiedProcess id (RawCommand "pnmfile" []) pnm'
+       out <- readCreateProcess id (RawCommand "pnmfile" []) pnm'
        hPutStrLn stderr "out"
        putStrLn ("out: " ++ show out)
     where

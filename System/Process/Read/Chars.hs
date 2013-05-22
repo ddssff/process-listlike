@@ -2,8 +2,8 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.Chars (
   ListLikePlus(..),
-  readModifiedProcessWithExitCode,
-  readModifiedProcess,
+  readCreateProcessWithExitCode,
+  readCreateProcess,
   readProcessWithExitCode,
   readProcess,
   ) where
@@ -42,13 +42,13 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
 --    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
-readModifiedProcessWithExitCode
+readCreateProcessWithExitCode
     :: forall a c.
        ListLikePlus a c =>
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
-readModifiedProcessWithExitCode p input = mask $ \restore -> do
+readCreateProcessWithExitCode p input = mask $ \restore -> do
     (Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
@@ -98,24 +98,24 @@ readModifiedProcessWithExitCode p input = mask $ \restore -> do
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
--- 'readModifiedProcessWithExitCode'.
+-- 'readCreateProcessWithExitCode'.
 readProcessWithExitCode
     :: ListLikePlus a c =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
-readProcessWithExitCode cmd args input = readModifiedProcessWithExitCode (proc cmd args) input
+readProcessWithExitCode cmd args input = readCreateProcessWithExitCode (proc cmd args) input
 
 -- | Implementation of 'System.Process.readProcess' in terms of
--- 'readModifiedProcess'.
+-- 'readCreateProcess'.
 readProcess
     :: ListLikePlus a c =>
        FilePath                 -- ^ command to run
     -> [String]                 -- ^ any arguments
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readProcess cmd args = readModifiedProcess (proc cmd args)
+readProcess cmd args = readCreateProcess (proc cmd args)
 
 -- | A polymorphic implementation of 'System.Process.readProcess' with a few generalizations:
 --
@@ -124,12 +124,12 @@ readProcess cmd args = readModifiedProcess (proc cmd args)
 --    2. Allows you to modify the 'CreateProcess' record before the process starts
 --
 --    3. Takes a 'CmdSpec', so you can launch either a 'RawCommand' or a 'ShellCommand'.
-readModifiedProcess
+readCreateProcess
     :: ListLikePlus a c =>
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
-readModifiedProcess p input = mask $ \restore -> do
+readCreateProcess p input = mask $ \restore -> do
     (Just inh, Just outh, _, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
 
@@ -145,7 +145,7 @@ readModifiedProcess p input = mask $ \restore -> do
 
       case ex of
         ExitSuccess   -> return out
-        ExitFailure r -> ioError (mkError "readModifiedProcess: " (cmdspec p) r)
+        ExitFailure r -> ioError (mkError "readCreateProcess: " (cmdspec p) r)
     where
       readLazy inh outh =
           do -- fork off a thread to start consuming stdout

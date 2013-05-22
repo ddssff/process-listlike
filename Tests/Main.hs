@@ -10,7 +10,7 @@ import Prelude hiding (length, concat)
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
-import System.Process.Read (readProcessWithExitCode, readModifiedProcessWithExitCode, readModifiedProcess, ListLikePlus(..))
+import System.Process.Read (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
 import Test.HUnit hiding (path)
 
 fromString :: String -> B.ByteString
@@ -56,24 +56,24 @@ test1 =
                       assertEqual "String" (ExitFailure 123, "", "This is an error message.\n") s)
        , TestLabel "pnmfile" $
          TestCase (do out <- B.readFile "Tests/penguin.jpg" >>=
-                             readModifiedProcess (proc "djpeg" []) >>=
-                             readModifiedProcess (proc "pnmfile" [])
+                             readCreateProcess (proc "djpeg" []) >>=
+                             readCreateProcess (proc "pnmfile" [])
                       assertEqual "pnmfile" (fromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") out)
        , TestLabel "pnmfile2" $
          TestCase (do jpg <- B.readFile "Tests/penguin.jpg"
-                      (code1, pnm, err1) <- readModifiedProcessWithExitCode (proc "djpeg" []) jpg
-                      out2 <- readModifiedProcess (proc "pnmfile" []) pnm
+                      (code1, pnm, err1) <- readCreateProcessWithExitCode (proc "djpeg" []) jpg
+                      out2 <- readCreateProcess (proc "pnmfile" []) pnm
                       assertEqual "pnmfile2" (ExitSuccess, empty, 2192, 27661, fromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") (code1, err1, length' jpg, length' pnm, out2))
        , TestLabel "file closed 1" $
-         TestCase (do result <- readModifiedProcessWithExitCode (proc "Tests/Test4.hs" []) (fromString "a" :: B.ByteString)
+         TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) (fromString "a" :: B.ByteString)
                       assertEqual "file closed 1" (ExitSuccess, (fromString "a"), (fromString "Read one character: 'a'\n")) result)
        , TestLabel "file closed 2" $
-         TestCase (do result <- readModifiedProcessWithExitCode (proc "Tests/Test4.hs" []) (lazyFromString "" :: L.ByteString)
+         TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) (lazyFromString "" :: L.ByteString)
                       assertEqual "file closed 2" (ExitFailure 1, empty, (lazyFromString "Test4.hs: <stdin>: hGetChar: end of file\n")) result)
        , TestLabel "file closed 3" $
-         TestCase (do result <- readModifiedProcessWithExitCode (proc "Tests/Test4.hs" []) "abcde"
+         TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) "abcde"
                       assertEqual "file closed 3" (ExitSuccess, "a", "Read one character: 'a'\n") result)
        , TestLabel "file closed 4" $
-         TestCase (do result <- readModifiedProcessWithExitCode (proc "Tests/Test4.hs" []) "abcde"
+         TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) "abcde"
                       assertEqual "file closed 4" (ExitSuccess, "a", "Read one character: 'a'\n") result)
        ])

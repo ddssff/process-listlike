@@ -2,8 +2,8 @@
 module System.Process.Text.Lazy
     ( readProcess
     , readProcessWithExitCode
-    , readModifiedProcess
-    , readModifiedProcessWithExitCode
+    , readCreateProcess
+    , readCreateProcessWithExitCode
     ) where
 
 import System.Exit (ExitCode)
@@ -14,7 +14,7 @@ readProcess :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
 readProcessWithExitCode :: R.ListLikePlus a c => FilePath -> [String] -> a -> IO (ExitCode, a, a)
 readProcessWithExitCode = R.readProcessWithExitCode
-readModifiedProcess :: R.ListLikePlus a c => CreateProcess -> a -> IO a
-readModifiedProcess = R.readModifiedProcess
-readModifiedProcessWithExitCode :: R.ListLikePlus a c => CreateProcess -> a -> IO (ExitCode, a, a)
-readModifiedProcessWithExitCode = R.readModifiedProcessWithExitCode
+readCreateProcess :: R.ListLikePlus a c => CreateProcess -> a -> IO a
+readCreateProcess = R.readCreateProcess
+readCreateProcessWithExitCode :: R.ListLikePlus a c => CreateProcess -> a -> IO (ExitCode, a, a)
+readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
