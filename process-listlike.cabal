@@ -47,7 +47,6 @@ Executable tests
     bytestring,
     HUnit,
     ListLike,
-    listlike-instances,
     process,
     process-listlike,
     text,
