@@ -34,8 +34,7 @@ Library
     process,
     bytestring,
     HUnit,
-    ListLike,
-    listlike-instances,
+    ListLike >= 4.0,
     process,
     text,
     utf8-string
