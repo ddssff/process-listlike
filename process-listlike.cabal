@@ -1,5 +1,5 @@
 Name:               process-listlike
-Version:            0.6.1
+Version:            0.6.2
 Synopsis:           Enhanced version of process-extras
 Description:        Extra functionality for the Process library
                     <http://hackage.haskell.org/package/process>.
@@ -11,6 +11,7 @@ Maintainer:         David Fox <dsf@seereason.com>
 Category:           System
 Build-type:         Simple
 Cabal-version:      >=1.8
+Extra-Source-Files: changelog
 
 source-repository head
   Type:             darcs
