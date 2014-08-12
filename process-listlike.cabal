@@ -1,8 +1,10 @@
 Name:               process-listlike
 Version:            0.6.2
 Synopsis:           Enhanced version of process-extras
-Description:        Extra functionality for the Process library
-                    <http://hackage.haskell.org/package/process>.
+Description:        Extra functionality for the Process library <http://hackage.haskell.org/package/process>.
+  This is a drop-in replacement for <http://hackage.haskell.org/package/process-extras>,
+  which adds support for creating processes from a CreateProcess, more access to the
+  internals, and completes support for the String type.
 Homepage:           http://src.seereason.com/process-listlike
 License:            MIT
 License-file:       LICENSE
@@ -15,7 +17,7 @@ Extra-Source-Files: changelog
 
 source-repository head
   Type:             darcs
-  Location:         http://src.seereason.com/process-extras
+  Location:         http://src.seereason.com/process-listlike
 
 Library
   ghc-options:      -Wall -O2
