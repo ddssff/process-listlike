@@ -1,3 +1,9 @@
+haskell-process-listlike (0.7) unstable; urgency=low
+
+  * Add module System.Process.Read.Interleaved.
+
+ -- David Fox <dsf@seereason.com>  Tue, 26 Aug 2014 11:16:13 -0700
+
 haskell-process-listlike (0.6.2) unstable; urgency=low
 
   * Make changelog visible in hackage.
