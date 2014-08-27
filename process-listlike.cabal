@@ -24,9 +24,10 @@ Library
 
   Exposed-modules:
     System.Process.Read
-    System.Process.Read.Chars
+    System.Process.Read.Chunks
     System.Process.Read.Instances
     System.Process.Read.Interleaved
+    System.Process.Read.ListLike
     System.Process.ByteString
     System.Process.ByteString.Lazy
     System.Process.String

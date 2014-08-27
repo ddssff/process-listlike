@@ -1,6 +1,6 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
-module System.Process.Read.Chars (
+module System.Process.Read.ListLike (
   ListLikePlus(..),
   readCreateProcessWithExitCode,
   readCreateProcess,

@@ -3,79 +3,119 @@
 {-# LANGUAGE CPP, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wall #-}
 module System.Process.Read.Interleaved
-    ( NonBlocking(..)
+    ( Chunked(..)
+    , readProcessInterleaved
     , readInterleaved
     ) where
 
-import Control.Concurrent (forkIO, MVar, newEmptyMVar, putMVar, takeMVar)
-import Data.ListLike (ListLikeIO(hGetContents))
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import Data.ListLike (ListLike(length))
-import Data.Monoid (Monoid, mempty, (<>))
+import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy as ByteString.Lazy
+import Data.List as List (map)
+import Data.Text (Text)
+import qualified Data.Text.Lazy as Text.Lazy (Text, toChunks, fromChunks)
 import Data.Word (Word8)
 import Prelude hiding (null, length, rem)
-import System.IO hiding (hPutStr, hGetContents)
 import System.Process.Read (ListLikePlus(..))
-import System.IO.Unsafe (unsafeInterleaveIO)
 
--- | Class of ListLikePlus types which can be used by
--- 'System.Process.Read.readInterleaved'.  This once had a hGetSome
--- method, but the new implementation using MVar makes that
--- unnecessary.
-class ListLikePlus a c => NonBlocking a c where
+import Control.Concurrent (forkIO, MVar, newEmptyMVar, putMVar, takeMVar)
+import Control.Exception as E (onException, catch, mask, try, throwIO, SomeException)
+import Control.Monad (unless)
+import Data.ListLike (ListLike(..), ListLikeIO(..))
+import Data.Monoid (Monoid(mempty), (<>))
+import GHC.IO.Exception (IOErrorType(ResourceVanished), IOException(ioe_type))
+import Prelude hiding (null, length, rem)
+import System.Exit (ExitCode)
+import System.IO hiding (hPutStr, hGetContents)
+import System.IO.Unsafe (unsafeInterleaveIO)
+import System.Process (CreateProcess(..), StdStream(CreatePipe),
+                       createProcess, waitForProcess, terminateProcess)
+
+-- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
+class ListLikePlus a c => Chunked a c where
   toChunks :: a -> [a]
 
-{- Its not safe to read a bytestring chunk and then convert it to a
-   string, the chunk might end in the middle of an encoded Char.
-instance NonBlocking String Char where
-  toChunks = error "toChunks" -}
+instance Chunked ByteString.Lazy.ByteString Word8 where
+  toChunks = List.map (ByteString.Lazy.fromChunks . (: [])) . ByteString.Lazy.toChunks
 
-instance NonBlocking B.ByteString Word8 where
+-- I have to assume that this is not prone to utf8 decode errors.
+-- When I was converting lazy ByteStrings to Text  I sometimes got
+-- such errors when a chunk ended in the middle of a unicode char.
+instance Chunked Text.Lazy.Text Char where
+  toChunks = List.map (Text.Lazy.fromChunks . (: [])) . Text.Lazy.toChunks
+
+-- Note that the instances that use @toChunks = (: [])@ put everything
+-- into a single chunk - lazy reading won't work with these types.
+instance Chunked ByteString.ByteString Word8 where
   toChunks = (: [])
 
-instance NonBlocking L.ByteString Word8 where
-  toChunks = Prelude.map (\ x -> L.fromChunks [x]) . L.toChunks
+instance Chunked String Char where
+  toChunks = (: [])
 
--- | Read input from a list of handles, using the function supplied
--- with each handle to convert the input into some Monoid.  This is a
--- great example of simple MVar usage, so I'm going to discuss it and
--- refer back to this text when I have concurrency stuff to write.
---
--- The parent process creates the empty mvar named 'res'.  We then
--- fork off threads for each of the handles we want to interleave
--- output from - typically stdout and stderr.  Each of those threads
--- reads the all of the output, converts it into chunks using the
--- 'toChunks' method.  For each chunk, it applies 'f' to convert it to
--- the Monoid type and does a 'putMVar' on the result.
---
--- Meanwhile, the parent process is repeatedly doing 'takeMVar'.  This
--- blocks until one of the threads does a 'putMVar', then it removes
--- the output chunk.  It recursively gets the remaining output and
--- appends the two.
---
--- The object type in the MVar is a Maybe - when this value is a Just
--- we are receiving a chunk, when it is Nothing it means we have
--- reached eof for one of the handles.  The parent process counts the
--- number of Nothings it has received, and when it reaches the number
--- of handles it is interleaving it is done.
-readInterleaved :: forall a b c. (NonBlocking a c, Monoid b) => [(a -> b, Handle)] -> IO b
-readInterleaved pairs = do
-  res <- newEmptyMVar
-  mapM_ (\ (f, h) -> forkIO $ sendChunks res f h) pairs
-  takeChunks (length pairs) res
+instance Chunked Data.Text.Text Char where
+  toChunks = (: [])
+
+-- | A test version of readProcessC
+-- Pipes code here: http://hpaste.org/76631
+readProcessInterleaved :: (Chunked a c, Monoid b) =>
+                          (ExitCode -> b) -> (a -> b) -> (a -> b)
+                       -> CreateProcess -> a -> IO b
+readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
+  (Just inh, Just outh, Just errh, pid) <-
+      createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
+
+  binary input [inh, outh, errh]
+
+  flip onException
+    (do hClose inh; hClose outh; hClose errh;
+        terminateProcess pid; waitForProcess pid) $ restore $ do
+
+    waitOut <- forkWait $ do result <- readInterleaved [(outf, outh), (errf, errh)]
+                             code <- waitForProcess pid
+                             return (result <> codef code)
+
+    -- now write and flush any input
+    (do unless (null input) (hPutStr inh input >> hFlush inh)
+        hClose inh) `catch` resourceVanished (\ _e -> return ())
+
+    -- wait on the output
+    waitOut
+
+-- | Simultaneously read the output from all the handles, using the
+-- associated functions to add them to the Monoid b in the order they
+-- appear.  Close each handle on EOF (even though they were open when
+-- we received them.)
+readInterleaved :: forall a b c. (Chunked a c, Monoid b) => [(a -> b, Handle)] -> IO b
+readInterleaved pairs = newEmptyMVar >>= readInterleaved' pairs
+
+readInterleaved' :: forall a b c. (Chunked a c, Monoid b) =>
+                    [(a -> b, Handle)] -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs res = do
+  mapM_ (forkIO . uncurry readHandle) pairs
+  takeChunks (length pairs)
     where
-      sendChunks :: MVar (Maybe b) -> (a -> b) -> Handle -> IO ()
-      sendChunks res f h = hGetContents h >>= mapM_ (sendChunk res f) . toChunks >> hClose h >> putMVar res Nothing
-      sendChunk :: MVar (Maybe b) -> (a -> b) -> a -> IO ()
-      sendChunk res f c = putMVar res (Just (f c))
-
-      takeChunks :: Int -> MVar (Maybe b) -> IO b
-      takeChunks 0 _ = return mempty
-      takeChunks openCount res = takeMVar res >>= takeChunk openCount res
-      takeChunk :: Int -> MVar (Maybe b) -> Maybe b -> IO b
-      takeChunk openCount res Nothing = takeChunks (openCount - 1) res
-      takeChunk openCount res (Just x) =
-          -- Why unsafeInterleaveIO?
-          do xs <- unsafeInterleaveIO $ takeChunks openCount res
+      readHandle f h = do
+        cs <- hGetContents h
+        mapM_ (\ c -> putMVar res (Right (f c))) (toChunks cs)
+        hClose h
+        putMVar res (Left h)
+      takeChunks :: Int -> IO b
+      takeChunks 0 = return mempty
+      takeChunks openCount = takeMVar res >>= takeChunk openCount
+      takeChunk :: Int -> Either Handle b -> IO b
+      takeChunk openCount (Left h) = hClose h >> takeChunks (openCount - 1)
+      takeChunk openCount (Right x) =
+          do xs <- unsafeInterleaveIO $ takeChunks openCount
              return (x <> xs)
+
+forkWait :: IO a -> IO (IO a)
+forkWait a = do
+  res <- newEmptyMVar
+  _ <- mask $ \restore -> forkIO $ try (restore a) >>= putMVar res
+  return (takeMVar res >>= either (\ex -> throwIO (ex :: SomeException)) return)
+
+-- | Wrapper for a process that provides a handler for the
+-- ResourceVanished exception.  This is frequently an exception we
+-- wish to ignore, because many processes will deliberately exit
+-- before they have read all of their input.
+resourceVanished :: (IOError -> IO a) -> IOError -> IO a
+resourceVanished epipe e = if ioe_type e == ResourceVanished then epipe e else ioError e

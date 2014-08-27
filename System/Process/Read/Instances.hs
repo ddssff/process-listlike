@@ -8,7 +8,6 @@ import Data.Int (Int64)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
-import Prelude hiding (catch)
 import System.IO (hSetBinaryMode)
 import System.Process.Read.Chars (ListLikePlus(..))
 

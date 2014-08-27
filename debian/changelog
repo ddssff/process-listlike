@@ -1,6 +1,8 @@
 haskell-process-listlike (0.7) unstable; urgency=low
 
-  * Add module System.Process.Read.Interleaved.
+  * Add module System.Process.Read.Interleaved (from process-progress)
+  * Add module System.Process.Read.Chunks (from process-progress)
+  * Rename module System.Process.Read.Chars -> System.Process.Read.ListLike
 
  -- David Fox <dsf@seereason.com>  Tue, 26 Aug 2014 11:16:13 -0700
 
