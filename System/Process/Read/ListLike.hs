@@ -11,9 +11,15 @@ module System.Process.Read.ListLike (
 import Control.Concurrent
 import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask)
 import Control.Monad
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import Data.Int (Int64)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
+import Data.Word (Word8)
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (null, length)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -188,3 +194,33 @@ mkError prefix (ShellCommand cmd) r =
 
 force :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
 force x = evaluate $ length' $ x
+
+instance ListLikePlus String Char where
+  type LengthType String = Int
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
+  lazy _ = True
+  length' = length
+
+instance ListLikePlus B.ByteString Word8 where
+  type LengthType B.ByteString = Int
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
+  lazy _ = False
+  length' = B.length
+
+instance ListLikePlus L.ByteString Word8 where
+  type LengthType L.ByteString = Int64
+  binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
+  lazy _ = True
+  length' = L.length
+
+instance ListLikePlus T.Text Char where
+  type LengthType T.Text = Int
+  binary _ _ = return ()
+  lazy _ = False
+  length' = T.length
+
+instance ListLikePlus LT.Text Char where
+  type LengthType LT.Text = Int64
+  binary _ _ = return ()
+  lazy _ = True
+  length' = LT.length

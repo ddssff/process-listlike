@@ -8,20 +8,17 @@ module System.Process.Read.Interleaved
     , readInterleaved
     ) where
 
-import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Lazy as ByteString.Lazy
-import Data.List as List (map)
-import Data.Text (Text)
-import qualified Data.Text.Lazy as Text.Lazy (Text, toChunks, fromChunks)
-import Data.Word (Word8)
-import Prelude hiding (null, length, rem)
-import System.Process.Read (ListLikePlus(..))
-
 import Control.Concurrent (forkIO, MVar, newEmptyMVar, putMVar, takeMVar)
 import Control.Exception as E (onException, catch, mask, try, throwIO, SomeException)
 import Control.Monad (unless)
+import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy as ByteString.Lazy
+import Data.List as List (map)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.Monoid (Monoid(mempty), (<>))
+import Data.Text (Text)
+import qualified Data.Text.Lazy as Text.Lazy (Text, toChunks, fromChunks)
+import Data.Word (Word8)
 import GHC.IO.Exception (IOErrorType(ResourceVanished), IOException(ioe_type))
 import Prelude hiding (null, length, rem)
 import System.Exit (ExitCode)
@@ -29,6 +26,7 @@ import System.IO hiding (hPutStr, hGetContents)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (CreateProcess(..), StdStream(CreatePipe),
                        createProcess, waitForProcess, terminateProcess)
+import System.Process.Read.ListLike (ListLikePlus(..))
 
 -- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
 class ListLikePlus a c => Chunked a c where

@@ -17,7 +17,7 @@ Extra-Source-Files: changelog
 
 source-repository head
   Type:             darcs
-  Location:         http://src.seereason.com/process-listlike
+  Location:         https://github.com/ddssff/process-listlike.git
 
 Library
   ghc-options:      -Wall -O2
@@ -25,7 +25,6 @@ Library
   Exposed-modules:
     System.Process.Read
     System.Process.Read.Chunks
-    System.Process.Read.Instances
     System.Process.Read.Interleaved
     System.Process.Read.ListLike
     System.Process.ByteString
