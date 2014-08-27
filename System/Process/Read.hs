@@ -6,5 +6,5 @@ module System.Process.Read
     , readProcess
     ) where
 
-import System.Process.Read.Chars
+import System.Process.Read.ListLike
 import System.Process.Read.Instances ()

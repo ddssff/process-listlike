@@ -9,7 +9,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
 import System.IO (hSetBinaryMode)
-import System.Process.Read.Chars (ListLikePlus(..))
+import System.Process.Read.ListLike (ListLikePlus(..))
 
 instance ListLikePlus String Char where
   type LengthType String = Int
