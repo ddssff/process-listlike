@@ -67,9 +67,7 @@ readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
 
-    waitOut <- forkWait $ do result <- readInterleaved [(outf, outh), (errf, errh)]
-                             code <- waitForProcess pid
-                             return (result <> codef code)
+    waitOut <- forkWait $ readInterleaved [(outf, outh), (errf, errh)] $ waitForProcess pid >>= return . codef
 
     -- now write and flush any input
     (do unless (null input) (hPutStr inh input >> hFlush inh)
@@ -82,12 +80,12 @@ readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
 -- associated functions to add them to the Monoid b in the order they
 -- appear.  Close each handle on EOF (even though they were open when
 -- we received them.)
-readInterleaved :: forall a b c. (Chunked a c, Monoid b) => [(a -> b, Handle)] -> IO b
-readInterleaved pairs = newEmptyMVar >>= readInterleaved' pairs
+readInterleaved :: forall a b c. (Chunked a c, Monoid b) => [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved pairs finish = newEmptyMVar >>= readInterleaved' pairs finish
 
 readInterleaved' :: forall a b c. (Chunked a c, Monoid b) =>
-                    [(a -> b, Handle)] -> MVar (Either Handle b) -> IO b
-readInterleaved' pairs res = do
+                    [(a -> b, Handle)] -> IO b -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs finish res = do
   mapM_ (forkIO . uncurry readHandle) pairs
   takeChunks (length pairs)
     where
@@ -97,7 +95,7 @@ readInterleaved' pairs res = do
         hClose h
         putMVar res (Left h)
       takeChunks :: Int -> IO b
-      takeChunks 0 = return mempty
+      takeChunks 0 = finish
       takeChunks openCount = takeMVar res >>= takeChunk openCount
       takeChunk :: Int -> Either Handle b -> IO b
       takeChunk openCount (Left h) = hClose h >> takeChunks (openCount - 1)
