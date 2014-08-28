@@ -15,7 +15,7 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import Data.List as List (map)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
-import Data.Monoid (Monoid(mempty), (<>))
+import Data.Monoid (Monoid, (<>))
 import Data.Text (Text)
 import qualified Data.Text.Lazy as Text.Lazy (Text, toChunks, fromChunks)
 import Data.Word (Word8)
