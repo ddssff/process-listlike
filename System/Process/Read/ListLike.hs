@@ -1,5 +1,5 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
-{-# LANGUAGE CPP, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.ListLike (
   ListLikePlus(..),
   readProcessInterleaved,
@@ -11,7 +11,7 @@ module System.Process.Read.ListLike (
   ) where
 
 import Control.Concurrent
-import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask)
+import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask, throw)
 import Control.Monad
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -59,20 +59,15 @@ readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
   flip onException
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-
     waitOut <- forkWait $ readInterleaved [(outf, outh), (errf, errh)] $ waitForProcess pid >>= return . codef
-
-    -- now write and flush any input
-    (do unless (null input) (hPutStr inh input >> hFlush inh)
-        hClose inh) `catch` resourceVanished (\ _e -> return ())
-
-    -- wait on the output
+    writeInput inh input
     waitOut
 
 -- | Simultaneously read the output from all the handles, using the
 -- associated functions to add them to the Monoid b in the order they
 -- appear.  Close each handle on EOF (even though they were open when
--- we received them.)
+-- we received them.)  I can't think of anything else to do with a
+-- handle that has reached EOF.
 readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) => [(a -> b, Handle)] -> IO b -> IO b
 readInterleaved pairs finish = newEmptyMVar >>= readInterleaved' pairs finish
 
@@ -155,29 +150,31 @@ readCreateProcess
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
 readCreateProcess p input = mask $ \restore -> do
-    (Just inh, Just outh, _, pid) <-
-        createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
+  -- Same code as readProcessInterleaved except that std_err is set
+  -- to Inherit, so no errh handle is created.  Thus, only one pair
+  -- exists to pass to readInterleaved.
+  (Just inh, Just outh, _, pid) <-
+      createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
 
-    flip onException
-      (do hClose inh; hClose outh;
-          terminateProcess pid; waitForProcess pid) $ restore $ do
-      -- fork off a thread to start consuming stdout
-      waitOut <- forkWait (hGetContents outh >>= \ out -> when (lazy input) (void $ force' out) >> return out)
-      writeInput inh
-      out <- waitOut
+  binary input [inh, outh]
 
-      hClose outh
+  flip onException
+    (do hClose inh; hClose outh;
+        terminateProcess pid; waitForProcess pid) $ restore $ do
+    waitOut <- forkWait $ readInterleaved [(id, outh)] $ waitForProcess pid >>= codef
+    writeInput inh input
+    waitOut
 
-      -- wait on the process
-      ex <- waitForProcess pid
-
-      case ex of
-        ExitSuccess   -> return out
-        ExitFailure r -> ioError (mkError "readCreateProcess: " (cmdspec p) r)
     where
-      writeInput inh = do
-         (do unless (null input) (hPutStr inh input >> hFlush inh)
-             hClose inh) `E.catch` resourceVanished (\ _ -> return ())
+      -- Throw an IO error on ExitFailure
+      codef (ExitFailure r) = throw (mkError "readCreateProcess: " (cmdspec p) r)
+      codef ExitSuccess = return mempty
+
+-- | Write and flush process input
+writeInput :: ListLikePlus a c => Handle -> a -> IO ()
+writeInput inh input = do
+  (do unless (null input) (hPutStr inh input >> hFlush inh)
+      hClose inh) `E.catch` resourceVanished (\ _ -> return ())
 
 forkWait :: IO a -> IO (IO a)
 forkWait a = do
