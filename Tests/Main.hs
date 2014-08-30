@@ -10,7 +10,7 @@ import Prelude hiding (length, concat)
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
-import System.Process.Read (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
+import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
 import Test.HUnit hiding (path)
 
 fromString :: String -> B.ByteString

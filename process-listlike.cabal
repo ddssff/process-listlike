@@ -1,5 +1,5 @@
 Name:               process-listlike
-Version:            0.7
+Version:            0.8
 Synopsis:           Enhanced version of process-extras
 Description:        Extra functionality for the Process library <http://hackage.haskell.org/package/process>.
   This is a drop-in replacement for <http://hackage.haskell.org/package/process-extras>,
@@ -23,10 +23,7 @@ Library
   ghc-options:      -Wall -O2
 
   Exposed-modules:
-    System.Process.Read
-    System.Process.Read.Chunks
-    System.Process.Read.Interleaved
-    System.Process.Read.ListLike
+    System.Process.ListLike
     System.Process.ByteString
     System.Process.ByteString.Lazy
     System.Process.String

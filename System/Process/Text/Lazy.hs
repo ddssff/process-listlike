@@ -10,7 +10,7 @@ module System.Process.Text.Lazy
 import Data.Text.Lazy (Text)
 import System.Exit (ExitCode)
 import System.Process (CreateProcess)
-import qualified System.Process.Read as R
+import qualified System.Process.ListLike as R
 
 readProcess :: (a ~ Text) => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
