@@ -1,6 +1,6 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
-module System.Process.Read.ListLike (
+module System.Process.ListLike (
   ListLikePlus(..),
   readProcessInterleaved,
   readInterleaved,
@@ -8,9 +8,12 @@ module System.Process.Read.ListLike (
   readCreateProcess,
   readProcessWithExitCode,
   readProcess,
+  Output(..),
+  readProcessChunks
   ) where
 
 import Control.Concurrent
+import Control.DeepSeq (NFData)
 import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask, throw)
 import Control.Monad
 import qualified Data.ByteString as B
@@ -240,3 +243,13 @@ instance Monoid ExitCode where
     mempty = ExitFailure 0
     mappend x (ExitFailure 0) = x
     mappend _ x = x
+
+-- | This lets us use deepseq's force on the stream of data returned
+-- by readProcessChunks.
+instance NFData ExitCode
+
+data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving (Eq, Show)
+
+readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Output a]
+readProcessChunks p input =
+    readProcessInterleaved (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
