@@ -131,9 +131,9 @@ readCreateProcessWithExitCode p input = mask $ \restore -> do
       readLazy :: Handle -> Handle -> Handle -> IO (a, a)
       readLazy inh outh errh =
            do out <- hGetContents outh
-              waitOut <- forkWait $ void $ force $ out
+              waitOut <- forkWait $ void $ force' $ out
               err <- hGetContents errh
-              waitErr <- forkWait $ void $ force $ err
+              waitErr <- forkWait $ void $ force' $ err
               -- now write and flush any input
               writeInput inh
               -- wait on the output
@@ -213,7 +213,7 @@ readCreateProcess p input = mask $ \restore -> do
       readLazy inh outh =
           do -- fork off a thread to start consuming stdout
              out <- hGetContents outh
-             waitOut <- forkWait $ void $ force $ out
+             waitOut <- forkWait $ void $ force' $ out
              writeInput inh
              waitOut
              return out
@@ -249,8 +249,8 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
-force :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
-force x = evaluate $ length' $ x
+force' :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
+force' x = evaluate $ length' $ x
 
 instance ListLikePlus String Char where
   type LengthType String = Int
