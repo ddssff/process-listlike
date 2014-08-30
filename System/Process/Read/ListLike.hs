@@ -117,45 +117,27 @@ readCreateProcessWithExitCode p input = mask $ \restore -> do
 
     flip onException
       (do hClose inh; hClose outh; hClose errh;
-          terminateProcess pid; waitForProcess pid) $ restore $ do
-      (out, err) <- (if lazy input then readLazy else readStrict) inh outh errh
+          terminateProcess pid; waitForProcess pid) $ restore $
+      do -- fork off a thread to start consuming stdout
+         waitOut <- forkWait (hGetContents outh >>= \ out -> when (lazy input) (void $ force' out) >> return out)
+         -- fork off a thread to start consuming stderr
+         waitErr <- forkWait (hGetContents errh >>= \ err -> when (lazy input) (void $ force' err) >> return err)
+         -- now write and flush any input
+         writeInput inh
+         -- wait on the output
+         out <- waitOut
+         err <- waitErr
 
-      hClose outh
-      hClose errh
+         hClose outh
+         hClose errh
 
-      -- wait on the process
-      ex <- waitForProcess pid
+         -- wait on the process
+         ex <- waitForProcess pid
 
-      return (ex, out, err)
+         return (ex, out, err)
     where
-      readLazy :: Handle -> Handle -> Handle -> IO (a, a)
-      readLazy inh outh errh =
-           do out <- hGetContents outh
-              waitOut <- forkWait $ void $ force' $ out
-              err <- hGetContents errh
-              waitErr <- forkWait $ void $ force' $ err
-              -- now write and flush any input
-              writeInput inh
-              -- wait on the output
-              waitOut
-              waitErr
-              return (out, err)
-
-      readStrict :: Handle -> Handle -> Handle -> IO (a, a)
-      readStrict inh outh errh =
-           do -- fork off a thread to start consuming stdout
-              waitOut <- forkWait $ hGetContents outh
-              -- fork off a thread to start consuming stderr
-              waitErr <- forkWait $ hGetContents errh
-              -- now write and flush any input
-              writeInput inh
-              -- wait on the output
-              out <- waitOut
-              err <- waitErr
-              return (out, err)
-
       writeInput :: Handle -> IO ()
-      writeInput inh = do
+      writeInput inh =
         (do unless (null input) (hPutStr inh input >> hFlush inh)
             hClose inh) `E.catch` resourceVanished (\ _ -> return ())
 
@@ -199,7 +181,10 @@ readCreateProcess p input = mask $ \restore -> do
     flip onException
       (do hClose inh; hClose outh;
           terminateProcess pid; waitForProcess pid) $ restore $ do
-      out <- (if lazy input then readLazy else readStrict) inh outh
+      -- fork off a thread to start consuming stdout
+      waitOut <- forkWait (hGetContents outh >>= \ out -> when (lazy input) (void $ force' out) >> return out)
+      writeInput inh
+      out <- waitOut
 
       hClose outh
 
@@ -210,19 +195,6 @@ readCreateProcess p input = mask $ \restore -> do
         ExitSuccess   -> return out
         ExitFailure r -> ioError (mkError "readCreateProcess: " (cmdspec p) r)
     where
-      readLazy inh outh =
-          do -- fork off a thread to start consuming stdout
-             out <- hGetContents outh
-             waitOut <- forkWait $ void $ force' $ out
-             writeInput inh
-             waitOut
-             return out
-
-      readStrict inh outh =
-          do waitOut <- forkWait $ hGetContents outh
-             writeInput inh
-             waitOut
-
       writeInput inh = do
          (do unless (null input) (hPutStr inh input >> hFlush inh)
              hClose inh) `E.catch` resourceVanished (\ _ -> return ())
