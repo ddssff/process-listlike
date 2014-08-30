@@ -6,7 +6,7 @@ module System.Process.Read.Chunks
 import Control.DeepSeq (NFData)
 import System.Exit (ExitCode)
 import System.Process (CreateProcess)
-import System.Process.Read.Interleaved
+import System.Process.Read.ListLike
 
 -- | This lets us use deepseq's force on the stream of data returned
 -- by readProcessChunks.

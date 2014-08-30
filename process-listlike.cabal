@@ -25,7 +25,6 @@ Library
   Exposed-modules:
     System.Process.Read
     System.Process.Read.Chunks
-    System.Process.Read.Interleaved
     System.Process.Read.ListLike
     System.Process.ByteString
     System.Process.ByteString.Lazy

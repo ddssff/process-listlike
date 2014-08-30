@@ -2,6 +2,9 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.ListLike (
   ListLikePlus(..),
+  Chunked(..),
+  readProcessInterleaved,
+  readInterleaved,
   readCreateProcessWithExitCode,
   readCreateProcess,
   readProcessWithExitCode,
@@ -14,17 +17,21 @@ import Control.Monad
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
+import Data.List as List (map)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
+import Data.Monoid (Monoid, (<>))
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
-import Prelude hiding (null, length)
+import Prelude hiding (null, length, rem)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO hiding (hPutStr, hGetContents)
 import qualified System.IO.Error as IO
+import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (CreateProcess(..), StdStream(CreatePipe, Inherit), proc,
                        CmdSpec(RawCommand, ShellCommand), showCommandForUser,
                        createProcess, waitForProcess, terminateProcess)
@@ -38,6 +45,61 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   -- using the current locale.
   lazy :: a -> Bool
   length' :: a -> LengthType a
+
+-- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
+class ListLikePlus a c => Chunked a c where
+  toChunks :: a -> [a]
+
+-- | A test version of readProcessC
+-- Pipes code here: http://hpaste.org/76631
+readProcessInterleaved :: (Chunked a c, Monoid b) =>
+                          (ExitCode -> b) -> (a -> b) -> (a -> b)
+                       -> CreateProcess -> a -> IO b
+readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
+  (Just inh, Just outh, Just errh, pid) <-
+      createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
+
+  binary input [inh, outh, errh]
+
+  flip onException
+    (do hClose inh; hClose outh; hClose errh;
+        terminateProcess pid; waitForProcess pid) $ restore $ do
+
+    waitOut <- forkWait $ readInterleaved [(outf, outh), (errf, errh)] $ waitForProcess pid >>= return . codef
+
+    -- now write and flush any input
+    (do unless (null input) (hPutStr inh input >> hFlush inh)
+        hClose inh) `catch` resourceVanished (\ _e -> return ())
+
+    -- wait on the output
+    waitOut
+
+-- | Simultaneously read the output from all the handles, using the
+-- associated functions to add them to the Monoid b in the order they
+-- appear.  Close each handle on EOF (even though they were open when
+-- we received them.)
+readInterleaved :: forall a b c. (Chunked a c, Monoid b) => [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved pairs finish = newEmptyMVar >>= readInterleaved' pairs finish
+
+readInterleaved' :: forall a b c. (Chunked a c, Monoid b) =>
+                    [(a -> b, Handle)] -> IO b -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs finish res = do
+  mapM_ (forkIO . uncurry readHandle) pairs
+  takeChunks (length pairs)
+    where
+      readHandle f h = do
+        cs <- hGetContents h
+        mapM_ (\ c -> putMVar res (Right (f c))) (toChunks cs)
+        hClose h
+        putMVar res (Left h)
+      takeChunks :: Int -> IO b
+      takeChunks 0 = finish
+      takeChunks openCount = takeMVar res >>= takeChunk openCount
+      takeChunk :: Int -> Either Handle b -> IO b
+      takeChunk openCount (Left h) = hClose h >> takeChunks (openCount - 1)
+      takeChunk openCount (Right x) =
+          do xs <- unsafeInterleaveIO $ takeChunks openCount
+             return (x <> xs)
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' with a few
@@ -224,3 +286,23 @@ instance ListLikePlus LT.Text Char where
   binary _ _ = return ()
   lazy _ = True
   length' = LT.length
+
+instance Chunked L.ByteString Word8 where
+  toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
+
+-- I have to assume that this is not prone to utf8 decode errors.
+-- When I was converting lazy ByteStrings to Text  I sometimes got
+-- such errors when a chunk ended in the middle of a unicode char.
+instance Chunked LT.Text Char where
+  toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
+
+-- Note that the instances that use @toChunks = (: [])@ put everything
+-- into a single chunk - lazy reading won't work with these types.
+instance Chunked B.ByteString Word8 where
+  toChunks = (: [])
+
+instance Chunked String Char where
+  toChunks = (: [])
+
+instance Chunked Data.Text.Text Char where
+  toChunks = (: [])

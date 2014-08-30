@@ -13,4 +13,3 @@ module System.Process.Read
 
 import System.Process.Read.Chunks
 import System.Process.Read.ListLike
-import System.Process.Read.Interleaved
