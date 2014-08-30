@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.ListLike (
   ListLikePlus(..),
-  Chunked(..),
   readProcessInterleaved,
   readInterleaved,
   readCreateProcessWithExitCode,
@@ -22,7 +21,6 @@ import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
 import Data.Monoid (Monoid, (<>))
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
@@ -45,14 +43,11 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   -- using the current locale.
   lazy :: a -> Bool
   length' :: a -> LengthType a
-
--- | Class of types which can also be used by 'System.Process.Read.readProcessChunks'.
-class ListLikePlus a c => Chunked a c where
   toChunks :: a -> [a]
 
 -- | A test version of readProcessC
 -- Pipes code here: http://hpaste.org/76631
-readProcessInterleaved :: (Chunked a c, Monoid b) =>
+readProcessInterleaved :: (ListLikePlus a c, Monoid b) =>
                           (ExitCode -> b) -> (a -> b) -> (a -> b)
                        -> CreateProcess -> a -> IO b
 readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
@@ -78,10 +73,10 @@ readProcessInterleaved codef outf errf p input = mask $ \ restore -> do
 -- associated functions to add them to the Monoid b in the order they
 -- appear.  Close each handle on EOF (even though they were open when
 -- we received them.)
-readInterleaved :: forall a b c. (Chunked a c, Monoid b) => [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) => [(a -> b, Handle)] -> IO b -> IO b
 readInterleaved pairs finish = newEmptyMVar >>= readInterleaved' pairs finish
 
-readInterleaved' :: forall a b c. (Chunked a c, Monoid b) =>
+readInterleaved' :: forall a b c. (ListLikePlus a c, Monoid b) =>
                     [(a -> b, Handle)] -> IO b -> MVar (Either Handle b) -> IO b
 readInterleaved' pairs finish res = do
   mapM_ (forkIO . uncurry readHandle) pairs
@@ -260,49 +255,34 @@ force x = evaluate $ length' $ x
 instance ListLikePlus String Char where
   type LengthType String = Int
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles (because internally this uses lazy bytestrings)
-  lazy _ = True
+  lazy _ = True  -- Why True?  toChunks returns a singleton?
   length' = length
+  toChunks = (: [])
 
 instance ListLikePlus B.ByteString Word8 where
   type LengthType B.ByteString = Int
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = False
   length' = B.length
+  toChunks = (: [])
 
 instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
   binary _ = mapM_ (\ h -> hSetBinaryMode h True) -- Prevent decoding errors when reading handles
   lazy _ = True
   length' = L.length
+  toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus T.Text Char where
   type LengthType T.Text = Int
   binary _ _ = return ()
   lazy _ = False
   length' = T.length
+  toChunks = (: [])
 
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   binary _ _ = return ()
   lazy _ = True
   length' = LT.length
-
-instance Chunked L.ByteString Word8 where
-  toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
-
--- I have to assume that this is not prone to utf8 decode errors.
--- When I was converting lazy ByteStrings to Text  I sometimes got
--- such errors when a chunk ended in the middle of a unicode char.
-instance Chunked LT.Text Char where
   toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
-
--- Note that the instances that use @toChunks = (: [])@ put everything
--- into a single chunk - lazy reading won't work with these types.
-instance Chunked B.ByteString Word8 where
-  toChunks = (: [])
-
-instance Chunked String Char where
-  toChunks = (: [])
-
-instance Chunked Data.Text.Text Char where
-  toChunks = (: [])

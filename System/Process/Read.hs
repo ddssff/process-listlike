@@ -4,7 +4,6 @@ module System.Process.Read
     , readCreateProcess
     , readProcessWithExitCode
     , readProcess
-    , Chunked(..)
     , readProcessInterleaved
     , readInterleaved
     , Output(..)

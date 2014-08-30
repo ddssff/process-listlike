@@ -14,6 +14,6 @@ instance NFData ExitCode
 
 data Output a = Stdout a | Stderr a | Result ExitCode | Exception IOError deriving (Eq, Show)
 
-readProcessChunks :: (Chunked a c) => CreateProcess -> a -> IO [Output a]
+readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Output a]
 readProcessChunks p input =
     readProcessInterleaved (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
