@@ -1,5 +1,5 @@
 -- | Versions of the functions in module 'System.Process.Read' specialized for type ByteString.
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE CPP, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Read.ListLike (
   ListLikePlus(..),
   readProcessInterleaved,
@@ -20,7 +20,7 @@ import Data.List as List (map)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
-import Data.Monoid (Monoid, (<>))
+import Data.Monoid (Monoid(mempty, mappend), (<>))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
@@ -84,6 +84,10 @@ readInterleaved' pairs finish res = do
     where
       readHandle f h = do
         cs <- hGetContents h
+        -- If the type returned as stdout and stderr is lazy we need
+        -- to force it here in the producer thread - I'm not exactly
+        -- sure why.  And why is String lazy?
+        when (lazy (undefined :: a)) (void $ force' cs)
         mapM_ (\ c -> putMVar res (Right (f c))) (toChunks cs)
         hClose h
         putMVar res (Left h)
@@ -111,35 +115,11 @@ readCreateProcessWithExitCode
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
-readCreateProcessWithExitCode p input = mask $ \restore -> do
-    (Just inh, Just outh, Just errh, pid) <-
-        createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
-
-    flip onException
-      (do hClose inh; hClose outh; hClose errh;
-          terminateProcess pid; waitForProcess pid) $ restore $
-      do -- fork off a thread to start consuming stdout
-         waitOut <- forkWait (hGetContents outh >>= \ out -> when (lazy input) (void $ force' out) >> return out)
-         -- fork off a thread to start consuming stderr
-         waitErr <- forkWait (hGetContents errh >>= \ err -> when (lazy input) (void $ force' err) >> return err)
-         -- now write and flush any input
-         writeInput inh
-         -- wait on the output
-         out <- waitOut
-         err <- waitErr
-
-         hClose outh
-         hClose errh
-
-         -- wait on the process
-         ex <- waitForProcess pid
-
-         return (ex, out, err)
-    where
-      writeInput :: Handle -> IO ()
-      writeInput inh =
-        (do unless (null input) (hPutStr inh input >> hFlush inh)
-            hClose inh) `E.catch` resourceVanished (\ _ -> return ())
+readCreateProcessWithExitCode p input =
+    readProcessInterleaved (\ c -> (c, mempty, mempty))
+                           (\ x -> (mempty, x, mempty))
+                           (\ x -> (mempty, mempty, x))
+                           p input
 
 -- | A polymorphic implementation of
 -- 'System.Process.readProcessWithExitCode' in terms of
@@ -258,3 +238,8 @@ instance ListLikePlus LT.Text Char where
   lazy _ = True
   length' = LT.length
   toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
+
+instance Monoid ExitCode where
+    mempty = ExitFailure 0
+    mappend x (ExitFailure 0) = x
+    mappend _ x = x
