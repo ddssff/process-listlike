@@ -1,3 +1,4 @@
+-- | "System.Process.ListLike" functions restricted to the lazy 'Data.ByteString.Lazy.Char8.ByteString' type.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.ByteString.Lazy

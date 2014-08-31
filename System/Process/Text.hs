@@ -1,3 +1,4 @@
+-- | "System.Process.ListLike" functions restricted to type 'Data.Text.Text'.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.Text

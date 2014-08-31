@@ -1,3 +1,4 @@
+-- | "System.Process.ListLike" functions restricted to type 'String'.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.String

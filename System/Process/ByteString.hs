@@ -1,3 +1,4 @@
+-- | "System.Process.ListLike" functions restricted to type 'Data.ByteString.Char8.ByteString'.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.ByteString

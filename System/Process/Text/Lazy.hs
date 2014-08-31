@@ -1,3 +1,4 @@
+-- | "System.Process.ListLike" functions restricted to the lazy 'Data.Text.Lazy.Text' type.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.Text.Lazy
