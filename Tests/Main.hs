@@ -1,16 +1,20 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Main where
 
 import Codec.Binary.UTF8.String (encode)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.ListLike as ListLike (ListLike(..))
+import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Prelude hiding (length, concat)
+import GHC.IO.Exception
 import System.Exit
+import System.IO.Error (tryIOError)
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
-import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, readProcessChunks, ListLikePlus(..))
+import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, readProcessChunks, ListLikePlus(..), Output(..))
 import Test.HUnit hiding (path)
 
 fromString :: String -> B.ByteString
@@ -40,11 +44,83 @@ test1 =
     TestLabel "test1"
       (TestList
        [ TestLabel "[Output]" $
-         TestCase (do b <- readProcessChunks (proc "Tests/Test1.hs" []) B.empty
-                      assertEqual "[Output]" ["ProcessHandle <processhandle>",
-                                              "Stdout \"\"", -- Hmm, is this normal?  Desirable?
-                                              "Stderr \"This is an error message.\\n\"",
-                                              "Result (ExitFailure 123)"] (ListLike.map show b))
+         TestList
+         [ TestCase (do b <- readProcessChunks (proc "cat" ["Tests/text"]) T.empty
+                        assertEqual "UTF8 Text"
+                                    ["ProcessHandle <processhandle>",
+                                     -- For Text, assuming your locale is set to utf8, the result is unicode.
+                                     "Stdout \"Signed: Baishi laoren \\30333\\30707\\32769\\20154, painted in the artist\\8217s 87th year.\\n\"",
+                                     "Stderr \"\"",
+                                     "Result ExitSuccess"] (ListLike.map show b))
+         , TestCase (do b <- readProcessChunks (proc "Tests/Test1.hs" []) B.empty
+                        assertEqual "[Output]"
+                                    ["ProcessHandle <processhandle>",
+                                     "Stdout \"\"", -- Hmm, is this normal?  Desirable?
+                                     "Stderr \"This is an error message.\\n\"",
+                                     "Result (ExitFailure 123)"] (ListLike.map show b))
+         , TestCase (do b <- readProcessChunks (proc "cat" ["Tests/text"]) B.empty
+                        assertEqual "UTF8 ByteString"
+                                    ["ProcessHandle <processhandle>",
+                                     -- With a ByteString we always get the UTF8 encoding, exactly what is in the input file
+                                     "Stdout \"Signed: Baishi laoren \\231\\153\\189\\231\\159\\179\\232\\128\\129\\228\\186\\186, painted in the artist\\226\\128\\153s 87th year.\\n\"",
+                                     "Stderr \"\"",
+                                     "Result ExitSuccess"] (ListLike.map show b))
+         , TestCase (do b <- readProcessChunks (proc "cat" ["Tests/text"]) ""
+                        assertEqual "UTF8 String"
+                                    ["ProcessHandle <processhandle>",
+                                     -- For String, assuming your locale is set to utf8, the result is unicode.
+                                     "Stdout \"Signed: Baishi laoren \\30333\\30707\\32769\\20154, painted in the artist\\8217s 87th year.\\n\"",
+                                     "Stderr \"\"",
+                                     "Result ExitSuccess"] (ListLike.map show b)) ]
+       -- This gets "hGetContents: invalid argument (invalid byte sequence)" if we don't call
+       -- binary on the file handles in readProcessInterleaved.
+
+       , TestLabel "JPG" $
+         TestList
+         [ TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) B.empty >>=
+                             return . mapMaybe (\ x -> case x of
+                                                         Stdout s -> Just (length' s)
+                                                         Stderr s -> Just (length' s)
+                                                         _ -> Nothing)
+                        assertEqual "ByteString Chunk Size"
+                                    [68668,0]
+                                    b
+                                    -- If we could read a jpg file into a string the chunks would look something like this:
+                                    -- [2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,1852]
+                                    )
+         , TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) L.empty >>=
+                             return . mapMaybe (\ x -> case x of
+                                                         Stdout s -> Just (length' s)
+                                                         Stderr s -> Just (length' s)
+                                                         _ -> Nothing)
+                        assertEqual "Lazy ByteString Chunk Size" [32752,32752,3164] b)
+{-       -- We don't seem to get an InvalidArgument exception back.
+         , TestCase (do b <- tryIOError (readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) "") >>= return . either Left (Right . show)
+                        assertEqual "String decoding exception" (Left (IOError { ioe_handle = Nothing
+                                                                               , ioe_type = InvalidArgument
+                                                                               , ioe_location = "recoverDecode"
+                                                                               , ioe_description = "invalid byte sequence"
+                                                                               , ioe_errno = Nothing
+                                                                               , ioe_filename = Nothing })) b)
+
+Related to https://ghc.haskell.org/trac/ghc/ticket/9236.  Try this:
+
+  import System.IO
+  import System.IO.Error
+
+  main = do
+    h <- openFile "Tests/houseisclean.jpg" ReadMode
+    r <- try (hGetContents h) >>= either exn str
+    hClose h
+      where
+        exn (e :: IOError) = putStrLn ("exn=" ++ show (ioe_handle e, ioe_type e, ioe_location e, ioe_description e, ioe_errno e, ioe_filename e))
+        str s = putStrLn ("s=" ++ show s)
+
+The exception gets thrown and caught after the string result starts
+being printed.  You can see the open quote.
+-}
+         ]
+
        , TestLabel "ByteString" $
          TestCase (do b <- readProcessWithExitCode "Tests/Test1.hs" [] B.empty
                       assertEqual "ByteString" (ExitFailure 123, fromString "", fromString "This is an error message.\n") b)

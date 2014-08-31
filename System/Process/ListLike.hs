@@ -43,12 +43,15 @@ import System.Process (ProcessHandle, CreateProcess(..), StdStream(CreatePipe, I
 -- these process functions.
 class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   type LengthType a
-  binary :: a -> [Handle] -> IO ()
-  -- ^ This should call 'hSetBinaryMode' on each handle if a is a
-  -- ByteString type, so that it doesn't attempt to decode the text
-  -- using the current locale.
+  setModes :: a -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
+  -- ^ Perform initialization on the handles returned by createProcess
+  -- based on this ListLikePlus instance - typically setting binary
+  -- mode on all the file descriptors if the element type is Word8.
+  -- If this is not done, reading something other than text (such as a
+  -- .jpg or .pdf file) will usually fail with a decoding error.
   lazy :: a -> Bool
-  -- ^ Is this a lazy type?
+  -- ^ Is this a lazy type?  If so a force is performed in the thread
+  -- reading process output.
   length' :: a -> LengthType a
   -- ^ Return the length of the input (this will force it.)
   toChunks :: a -> [a]
@@ -63,10 +66,10 @@ readProcessInterleaved :: (ListLikePlus a c, Monoid b) =>
                           (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b)
                        -> CreateProcess -> a -> IO b
 readProcessInterleaved pidf codef outf errf p input = mask $ \ restore -> do
-  (Just inh, Just outh, Just errh, pid) <-
+  hs@(Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
-  binary input [inh, outh, errh]
+  setModes input hs
 
   flip onException
     (do hClose inh; hClose outh; hClose errh;
@@ -168,10 +171,10 @@ readCreateProcess
     -> a               -- ^ standard input
     -> IO a            -- ^ stdout
 readCreateProcess p input = mask $ \restore -> do
-  (Just inh, Just outh, _, pid) <-
+  hs@(Just inh, Just outh, _, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
 
-  binary input [inh, outh]
+  setModes input hs
 
   flip onException
     (do hClose inh; hClose outh;
@@ -221,37 +224,35 @@ force' x = evaluate $ length' $ x
 
 instance ListLikePlus String Char where
   type LengthType String = Int
-  -- We need to call binary for processes operating on String
-  -- because internally the process still uses ByteStrings
-  binary _ = mapM_ (\ h -> hSetBinaryMode h True)
+  setModes _ _  = return ()
   lazy _ = True  -- Not quite sure why this is True.
   length' = length
   toChunks = (: [])
 
 instance ListLikePlus B.ByteString Word8 where
   type LengthType B.ByteString = Int
-  binary _ = mapM_ (\ h -> hSetBinaryMode h True)
+  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
   lazy _ = False
   length' = B.length
   toChunks = (: [])
 
 instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
-  binary _ = mapM_ (\ h -> hSetBinaryMode h True)
+  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
   lazy _ = True
   length' = L.length
   toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus T.Text Char where
   type LengthType T.Text = Int
-  binary _ _ = return ()
+  setModes _ _  = return ()
   lazy _ = False
   length' = T.length
   toChunks = (: [])
 
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
-  binary _ _ = return ()
+  setModes _ _  = return ()
   lazy _ = True
   length' = LT.length
   toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
