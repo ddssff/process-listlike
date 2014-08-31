@@ -16,5 +16,5 @@ main = copyFile "debian/changelog" "changelog" >>
        }
 
 runTestScript lbi =
-    system (buildDir lbi ++ "/tests/tests") >>= \ code ->
+    system (buildDir lbi ++ "/process-listlike-tests/process-listlike-tests") >>= \ code ->
     if code == ExitSuccess then return () else error "unit test failure"

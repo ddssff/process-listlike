@@ -40,7 +40,7 @@ Library
     text,
     utf8-string
 
-Executable tests
+Executable process-listlike-tests
   Main-Is: Tests/Main.hs
   GHC-Options: -Wall -O2 -threaded -rtsopts
   Build-Depends:
