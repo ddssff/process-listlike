@@ -3,14 +3,14 @@ module Main where
 import Codec.Binary.UTF8.String (encode)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import Data.ListLike (ListLike(..))
+import Data.ListLike as ListLike (ListLike(..))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Prelude hiding (length, concat)
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
-import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
+import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, readProcessChunks, ListLikePlus(..))
 import Test.HUnit hiding (path)
 
 fromString :: String -> B.ByteString
@@ -39,7 +39,13 @@ test1 :: Test
 test1 =
     TestLabel "test1"
       (TestList
-       [ TestLabel "ByteString" $
+       [ TestLabel "[Output]" $
+         TestCase (do b <- readProcessChunks (proc "Tests/Test1.hs" []) B.empty
+                      assertEqual "[Output]" ["ProcessHandle <processhandle>",
+                                              "Stdout \"\"", -- Hmm, is this normal?  Desirable?
+                                              "Stderr \"This is an error message.\\n\"",
+                                              "Result (ExitFailure 123)"] (ListLike.map show b))
+       , TestLabel "ByteString" $
          TestCase (do b <- readProcessWithExitCode "Tests/Test1.hs" [] B.empty
                       assertEqual "ByteString" (ExitFailure 123, fromString "", fromString "This is an error message.\n") b)
        , TestLabel "Lazy" $
