@@ -23,6 +23,7 @@ Library
   ghc-options:      -Wall -O2
 
   Exposed-modules:
+    System.Process.Chunks
     System.Process.ListLike
     System.Process.ByteString
     System.Process.ByteString.Lazy
