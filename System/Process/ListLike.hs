@@ -10,13 +10,11 @@ module System.Process.ListLike (
   readCreateProcess,
   readProcessWithExitCode,
   readProcess,
-  Output(..),
-  readProcessChunks,
   showCmdSpecForUser
   ) where
 
 import Control.Concurrent
-import Control.DeepSeq (NFData)
+import Control.DeepSeq (force)
 import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask, throw)
 import Control.Monad
 import qualified Data.ByteString as B
@@ -99,7 +97,7 @@ readInterleaved' start pairs finish res = do
         -- If the type returned as stdout and stderr is lazy we need
         -- to force it here in the producer thread - I'm not exactly
         -- sure why.  And why is String lazy?
-        when (lazy (undefined :: a)) (void $ force' cs)
+        when (lazy (undefined :: a)) (void $ evaluate cs)
         mapM_ (\ c -> putMVar res (Right (f c))) (toChunks cs)
         hClose h
         putMVar res (Left h)
@@ -220,22 +218,8 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
-force' :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
-force' x = evaluate $ length' $ x
-
-instance ListLikePlus String Char where
-  type LengthType String = Int
-  setModes _ _  = return ()
-  lazy _ = True  -- Not quite sure why this is True.
-  length' = length
-  toChunks = (: [])
-
-instance ListLikePlus B.ByteString Word8 where
-  type LengthType B.ByteString = Int
-  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
-  lazy _ = False
-  length' = B.length
-  toChunks = (: [])
+-- force' :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
+-- force' x = evaluate $ length' $ x
 
 instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
@@ -244,13 +228,6 @@ instance ListLikePlus L.ByteString Word8 where
   length' = L.length
   toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
 
-instance ListLikePlus T.Text Char where
-  type LengthType T.Text = Int
-  setModes _ _  = return ()
-  lazy _ = False
-  length' = T.length
-  toChunks = (: [])
-
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   setModes _ _  = return ()
@@ -258,35 +235,12 @@ instance ListLikePlus LT.Text Char where
   length' = LT.length
   toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
 
+-- | A chunk stream should have an 'ExitCode' at the end, this monoid lets
+-- us build a monoid for the type returned by readProcessWithExitCode.
 instance Monoid ExitCode where
     mempty = ExitFailure 0
     mappend x (ExitFailure 0) = x
     mappend _ x = x
-
--- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
--- of data returned by 'readProcessChunks'.
-instance NFData ExitCode
-
--- | The output stream of a process returned by 'readProcessChunks'.
-data Output a
-    = ProcessHandle ProcessHandle -- ^ This will always come first
-    | Stdout a
-    | Stderr a
-    | Exception IOError
-    | Result ExitCode
-    deriving Show
-
--- Is this rude?  It will collide with any other bogus Show
--- ProcessHandle instances created elsewhere.
-instance Show ProcessHandle where
-    show _ = "<processhandle>"
-
--- | A concrete use of 'readProcessInterleaved' - build a list
--- containing chunks of process output, any exceptions that get thrown
--- (unimplemented), and finally an exit code.
-readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Output a]
-readProcessChunks p input =
-    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
 
 showCmdSpecForUser :: CmdSpec -> String
 showCmdSpecForUser (ShellCommand s) = s

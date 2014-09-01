@@ -25,10 +25,11 @@ Library
   Exposed-modules:
     System.Process.Chunks
     System.Process.ListLike
-    System.Process.ByteString
+    -- System.Process.ByteString
     System.Process.ByteString.Lazy
-    System.Process.String
-    System.Process.Text
+    System.Process.Strict
+    -- System.Process.String
+    -- System.Process.Text
     System.Process.Text.Lazy
 
   Build-depends:
@@ -37,6 +38,7 @@ Library
     deepseq,
     HUnit,
     ListLike >= 4.0,
+    mtl,
     process,
     text,
     utf8-string
@@ -50,6 +52,7 @@ Executable process-listlike-tests
     deepseq,
     HUnit,
     ListLike,
+    mtl,
     process,
     process-listlike,
     text,
