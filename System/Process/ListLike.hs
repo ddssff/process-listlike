@@ -51,8 +51,6 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   lazy :: a -> Bool
   -- ^ Is this a lazy type?  If so a force is performed in the thread
   -- reading process output.
-  length' :: a -> LengthType a
-  -- ^ Return the length of the input (this will force it.)
   toChunks :: a -> [a]
   -- ^ Convert the value to a list of chunks.  This is usually
   -- a call to a lazy type's toChunks function, for strict types
@@ -218,21 +216,16 @@ mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
 
--- force' :: forall a c. ListLikePlus a c => a -> IO (LengthType a)
--- force' x = evaluate $ length' $ x
-
 instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
   lazy _ = True
-  length' = L.length
   toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   setModes _ _  = return ()
   lazy _ = True
-  length' = LT.length
   toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
 
 -- | A chunk stream should have an 'ExitCode' at the end, this monoid lets

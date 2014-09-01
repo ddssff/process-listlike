@@ -77,6 +77,8 @@ canonicalChunks :: ListLikePlus a c => [Chunk a] -> [Chunk a]
 canonicalChunks [] = []
 canonicalChunks (Stdout a : Stdout b : more) = canonicalChunks (Stdout (a <> b) : more)
 canonicalChunks (Stderr a : Stderr b : more) = canonicalChunks (Stderr (a <> b) : more)
+canonicalChunks (Stdout a : more) | null a = canonicalChunks more
+canonicalChunks (Stderr a : more) | null a = canonicalChunks more
 canonicalChunks (a : more) = a : canonicalChunks more
 
 -- | The monad state, are we at the beginning of a line or the middle?

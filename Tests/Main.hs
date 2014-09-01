@@ -108,8 +108,8 @@ test1 =
          , -} 
            TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) L.empty >>=
                              return . mapMaybe (\ x -> case x of
-                                                         Stdout s -> Just (length' s)
-                                                         Stderr s -> Just (length' s)
+                                                         Stdout s -> Just (length s)
+                                                         Stderr s -> Just (length s)
                                                          _ -> Nothing)
                         assertEqual "Lazy ByteString Chunk Size" [32752,32752,3164] b)
 {-       -- We don't seem to get an InvalidArgument exception back.
@@ -168,7 +168,7 @@ being printed.  You can see the open quote.
          TestCase (do jpg <- L.readFile "Tests/penguin.jpg"
                       (code1, pnm, err1) <- readCreateProcessWithExitCode (proc "djpeg" []) jpg
                       out2 <- readCreateProcess (proc "pnmfile" []) pnm
-                      assertEqual "pnmfile2" (ExitSuccess, empty, 2192, 27661, lazyFromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") (code1, err1, length' jpg, length' pnm, out2))
+                      assertEqual "pnmfile2" (ExitSuccess, empty, 2192, 27661, lazyFromString "stdin:\tPPM raw, 96 by 96  maxval 255\n") (code1, err1, length jpg, length pnm, out2))
        , TestLabel "file closed 1" $
          TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) (lazyFromString "a" :: L.ByteString)
                       assertEqual "file closed 1" (ExitSuccess, (lazyFromString "a"), (lazyFromString "Read one character: 'a'\n")) result)
