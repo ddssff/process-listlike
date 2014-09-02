@@ -15,6 +15,7 @@ import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
 import System.Process.Chunks (Chunk(..), readProcessChunks, canonicalChunks)
+import System.Process.Lazy ()
 import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
 import System.Process.Strict ()
 import Test.HUnit hiding (path)

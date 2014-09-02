@@ -10,7 +10,8 @@ import qualified Data.Text.Lazy as L (Text)
 import System.IO (hPutStr, stderr, hPutStrLn)
 import System.Process -- (CmdSpec(RawCommand, ShellCommand), rawSystem)
 import System.Process.Chunks (readProcessChunks, dotifyChunks, putDots, putChunk)
-import System.Process.Strict
+import System.Process.Lazy ()
+import System.Process.Strict ()
 
 -- Test infinite strings for each of the ListLikePlus instances.  None
 -- of these exit, you have to interrupt them.  Other than test3, they all

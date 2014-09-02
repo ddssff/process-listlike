@@ -12,6 +12,7 @@ import Data.Text.Lazy (Text)
 import System.Exit (ExitCode)
 import System.Process (CreateProcess)
 import qualified System.Process.ListLike as R
+import System.Process.Lazy ()
 
 readProcess :: (a ~ Text) => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess

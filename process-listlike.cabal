@@ -24,12 +24,13 @@ Library
 
   Exposed-modules:
     System.Process.Chunks
+    System.Process.Lazy
     System.Process.ListLike
-    -- System.Process.ByteString
+    System.Process.ByteString
     System.Process.ByteString.Lazy
     System.Process.Strict
-    -- System.Process.String
-    -- System.Process.Text
+    System.Process.String
+    System.Process.Text
     System.Process.Text.Lazy
 
   Build-depends:
