@@ -46,9 +46,6 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   -- mode on all the file descriptors if the element type is Word8.
   -- If this is not done, reading something other than text (such as a
   -- .jpg or .pdf file) will usually fail with a decoding error.
-  lazy :: a -> Bool
-  -- ^ Is this a lazy type?  If so a force is performed in the thread
-  -- reading process output.
   readChunks :: Handle -> IO [a]
   -- ^ Read the list of chunks from this handle.  For lazy types this
   -- is just a call to hGetContents followed by toChunks.  For strict
@@ -218,13 +215,11 @@ mkError prefix (ShellCommand cmd) r =
 instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
-  lazy _ = True
   readChunks h = hGetContents h >>= evaluate . Prelude.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   setModes _ _  = return ()
-  lazy _ = True
   readChunks h = hGetContents h >>= evaluate . Prelude.map (LT.fromChunks . (: [])) . LT.toChunks
 
 -- | This String instance is implemented using the Lazy Text instance.
@@ -235,7 +230,6 @@ instance ListLikePlus LT.Text Char where
 instance ListLikePlus String Char where
   type LengthType String = Int
   setModes _ _  = return ()
-  lazy _ = True
   readChunks h = readChunks h >>= return . List.map T.unpack . List.concat . List.map LT.toChunks
 
 -- | A chunk stream should have an 'ExitCode' at the end, this monoid lets
