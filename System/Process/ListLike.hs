@@ -14,13 +14,11 @@ module System.Process.ListLike (
   ) where
 
 import Control.Concurrent
-import Control.DeepSeq (force)
 import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask, throw)
 import Control.Monad
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Int (Int64)
-import Data.List as List (map)
+import Data.List as List (map, concat)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
@@ -51,10 +49,10 @@ class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
   lazy :: a -> Bool
   -- ^ Is this a lazy type?  If so a force is performed in the thread
   -- reading process output.
-  toChunks :: a -> [a]
-  -- ^ Convert the value to a list of chunks.  This is usually
-  -- a call to a lazy type's toChunks function, for strict types
-  -- it just returns a singleton list.
+  readChunks :: Handle -> IO [a]
+  -- ^ Read the list of chunks from this handle.  For lazy types this
+  -- is just a call to hGetContents followed by toChunks.  For strict
+  -- types it might return a singleton list.  Strings are trickier.
 
 -- | Read the output of a process and use the argument functions to
 -- convert it into a Monoid, preserving the order of appearance of the
@@ -90,13 +88,14 @@ readInterleaved' start pairs finish res = do
   r <- takeChunks (length pairs)
   return $ start <> r
     where
+      readHandle :: (a -> b) -> Handle -> IO ()
       readHandle f h = do
-        cs <- hGetContents h
+        cs <- readChunks h
         -- If the type returned as stdout and stderr is lazy we need
         -- to force it here in the producer thread - I'm not exactly
         -- sure why.  And why is String lazy?
-        when (lazy (undefined :: a)) (void $ evaluate cs)
-        mapM_ (\ c -> putMVar res (Right (f c))) (toChunks cs)
+        -- when (lazy (undefined :: a)) (void cs)
+        mapM_ (\ c -> putMVar res (Right (f c))) cs
         hClose h
         putMVar res (Left h)
       takeChunks :: Int -> IO b
@@ -220,13 +219,24 @@ instance ListLikePlus L.ByteString Word8 where
   type LengthType L.ByteString = Int64
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
   lazy _ = True
-  toChunks = List.map (L.fromChunks . (: [])) . L.toChunks
+  readChunks h = hGetContents h >>= evaluate . Prelude.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus LT.Text Char where
   type LengthType LT.Text = Int64
   setModes _ _  = return ()
   lazy _ = True
-  toChunks = List.map (LT.fromChunks . (: [])) . LT.toChunks
+  readChunks h = hGetContents h >>= evaluate . Prelude.map (LT.fromChunks . (: [])) . LT.toChunks
+
+-- | This String instance is implemented using the Lazy Text instance.
+-- Otherwise (without some serious coding) String would be a strict
+-- instance .  Note that the 'System.Process.readProcess' in the
+-- process library is strict, while our equivalent is not - see test4
+-- in Tests/Dots.hs.
+instance ListLikePlus String Char where
+  type LengthType String = Int
+  setModes _ _  = return ()
+  lazy _ = True
+  readChunks h = readChunks h >>= return . List.map T.unpack . List.concat . List.map LT.toChunks
 
 -- | A chunk stream should have an 'ExitCode' at the end, this monoid lets
 -- us build a monoid for the type returned by readProcessWithExitCode.

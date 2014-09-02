@@ -6,6 +6,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.ListLike as ListLike (ListLike(..))
 import Data.Maybe (mapMaybe)
+import Data.Monoid (Monoid(..))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import Prelude hiding (length, concat)
@@ -15,7 +16,7 @@ import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes,
 import System.Process (proc)
 import System.Process.Chunks (Chunk(..), readProcessChunks, canonicalChunks)
 import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..))
--- import System.Process.Strict ()
+import System.Process.Strict ()
 import Test.HUnit hiding (path)
 
 fromString :: String -> B.ByteString
@@ -24,23 +25,44 @@ fromString = fromList . encode
 lazyFromString :: String -> L.ByteString
 lazyFromString = L.fromChunks . (: []) . fromString
 
+instance Monoid Test where
+    mempty = TestList []
+    mappend (TestList a) (TestList b) = TestList (a ++ b)
+    mappend (TestList a) b = TestList (a ++ [b])
+    mappend a (TestList b) = TestList ([a] ++ b)
+    mappend a b = TestList [a, b]
+
 testInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
-testInstances mkTest =
-    TestList $ (\ (TestList xs) -> xs) (testCharInstances mkTest) ++
-               (\ (TestList xs) -> xs) (testWord8Instances mkTest)
+testInstances mkTest = mappend (testCharInstances mkTest) (testWord8Instances mkTest)
+
+testStrictInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testStrictInstances mkTest = mappend (testStrictCharInstances mkTest) (testStrictWord8Instances mkTest)
+
+testLazyInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testLazyInstances mkTest = mappend (testLazyCharInstances mkTest) (testLazyWord8Instances mkTest)
 
 testCharInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
-testCharInstances mkTest =
+testCharInstances mkTest = mappend (testLazyCharInstances mkTest) (testStrictCharInstances mkTest)
+
+testLazyCharInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testLazyCharInstances mkTest =
     TestList [ TestLabel "Lazy Text" $ mkTest LT.empty
-             -- , TestLabel "Strict Text" $ mkTest T.empty
-             -- , TestLabel "String" $ mkTest ""
-             ]
+             , TestLabel "String" $ mkTest ("" :: String) ]
+
+testStrictCharInstances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testStrictCharInstances mkTest =
+    TestList [ TestLabel "Strict Text" $ mkTest T.empty ]
 
 testWord8Instances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
-testWord8Instances mkTest =
-    TestList [ TestLabel "Lazy ByteString" $ mkTest L.empty
-             -- , TestLabel "Strict ByteString" $ mkTest B.empty
-             ]
+testWord8Instances mkTest = mappend (testLazyWord8Instances mkTest) (testStrictWord8Instances mkTest)
+
+testLazyWord8Instances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testLazyWord8Instances mkTest =
+    TestList [ TestLabel "Lazy ByteString" $ mkTest L.empty ]
+
+testStrictWord8Instances :: (forall a c. (Show a, ListLikePlus a c) => a -> Test) -> Test
+testStrictWord8Instances mkTest =
+    TestList [ TestLabel "Strict ByteString" $ mkTest B.empty ]
 
 main :: IO ()
 main =
@@ -71,7 +93,7 @@ test1 =
                                     ["ProcessHandle <processhandle>",
                                      -- For Text, assuming your locale is set to utf8, the result is unicode.
                                      "Stdout \"Signed: Baishi laoren \\30333\\30707\\32769\\20154, painted in the artist\\8217s 87th year.\\n\"",
-                                     "Result ExitSuccess"] (ListLike.map show b)))
+                                     "Result ExitSuccess"] (ListLike.map show (canonicalChunks b))))
          , testWord8Instances
            (\ i -> TestCase (do b <- readProcessChunks (proc "cat" ["Tests/text"]) i
                                 assertEqual
@@ -79,9 +101,9 @@ test1 =
                                     ["ProcessHandle <processhandle>",
                                      -- For ByteString we get utf8 encoded text
                                      "Stdout \"Signed: Baishi laoren \\231\\153\\189\\231\\159\\179\\232\\128\\129\\228\\186\\186, painted in the artist\\226\\128\\153s 87th year.\\n\"",
-                                     "Result ExitSuccess"] (ListLike.map show b)))
+                                     "Result ExitSuccess"] (ListLike.map show (canonicalChunks b))))
          , testInstances
-           (\ i -> TestCase (do b <- readProcessChunks (proc "Tests/Test1.hs" []) L.empty
+           (\ i -> TestCase (do b <- readProcessChunks (proc "Tests/Test1.hs" []) i
                                 assertEqual
                                     "[Chunk]"
                                     ["ProcessHandle <processhandle>",
@@ -105,13 +127,21 @@ test1 =
                                     -- If we could read a jpg file into a string the chunks would look something like this:
                                     -- [2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,2048,2048,1952,2048,1852]
                                     )
-         , -} 
-           TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) L.empty >>=
-                             return . mapMaybe (\ x -> case x of
-                                                         Stdout s -> Just (length s)
-                                                         Stderr s -> Just (length s)
-                                                         _ -> Nothing)
-                        assertEqual "Lazy ByteString Chunk Size" [32752,32752,3164] b)
+         , -}
+           testLazyWord8Instances
+           ( \ i -> TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) i >>=
+                                      return . mapMaybe (\ x -> case x of
+                                                                  Stdout s -> Just (length s)
+                                                                  Stderr s -> Just (length s)
+                                                                  _ -> Nothing)
+                                 assertEqual "Chunk Size" [32752,32752,3164] b))
+         , testStrictWord8Instances
+           ( \ i -> TestCase (do b <- readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) i >>=
+                                      return . mapMaybe (\ x -> case x of
+                                                                  Stdout s -> Just (length s)
+                                                                  Stderr s -> Just (length s)
+                                                                  _ -> Nothing)
+                                 assertEqual "Chunk Size" [68668,0] b))
 {-       -- We don't seem to get an InvalidArgument exception back.
          , TestCase (do b <- tryIOError (readProcessChunks (proc "cat" ["Tests/houseisclean.jpg"]) "") >>= return . either Left (Right . show)
                         assertEqual "String decoding exception" (Left (IOError { ioe_handle = Nothing
