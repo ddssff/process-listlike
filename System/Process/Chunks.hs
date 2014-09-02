@@ -28,7 +28,7 @@ import Prelude hiding (mapM, putStr, null, tail, break, sequence, length, replic
 import System.Exit (ExitCode)
 import System.IO (stderr)
 import System.Process (ProcessHandle, CreateProcess)
-import System.Process.ListLike (ListLikePlus(LengthType), readProcessInterleaved)
+import System.Process.ListLike (ListLikePlus, readProcessInterleaved)
 
 -- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
 -- of data returned by 'readProcessChunks'.
@@ -125,7 +125,7 @@ putIndented :: (ListLikePlus a c, Eq c) => c -> a -> a -> [Chunk a] -> IO [Chunk
 putIndented nl outp errp chunks =
     evalStateT (mapM (\ x -> indentChunk nl outp errp x >>= mapM_ (lift . putChunk) >> return x) chunks) BOL
 
-dotifyChunk :: forall a c m. (Monad m, Functor m, ListLikePlus a c) => LengthType a -> c -> Chunk a -> StateT Int m [Chunk a]
+dotifyChunk :: forall a c m. (Monad m, Functor m, ListLikePlus a c) => Int -> c -> Chunk a -> StateT Int m [Chunk a]
 dotifyChunk charsPerDot dot chunk =
     case chunk of
       Stdout x -> doChars (length x)
@@ -138,12 +138,12 @@ dotifyChunk charsPerDot dot chunk =
         put rem'
         if (count' > 0) then return [Stderr (replicate count' dot)] else return []
 
-dotifyChunks :: forall a c. (ListLikePlus a c) => LengthType a -> c -> [Chunk a] -> [Chunk a]
+dotifyChunks :: forall a c. (ListLikePlus a c) => Int -> c -> [Chunk a] -> [Chunk a]
 dotifyChunks charsPerDot dot chunks =
     evalState (Prelude.concat <$> mapM (dotifyChunk charsPerDot dot) chunks) 0
 
 -- | Output the dotified text of a chunk list, but return the original
 -- unindented list.
-putDots :: (ListLikePlus a c) => LengthType a -> c -> [Chunk a] -> IO [Chunk a]
+putDots :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
 putDots charsPerDot dot chunks =
     evalStateT (mapM (\ x -> dotifyChunk charsPerDot dot x >>= mapM_ (lift . putChunk) >> return x) chunks) 0

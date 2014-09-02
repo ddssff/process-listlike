@@ -17,7 +17,6 @@ import Control.Concurrent
 import Control.Exception as E (SomeException, onException, evaluate, catch, try, throwIO, mask, throw)
 import Control.Monad
 import qualified Data.ByteString.Lazy as L
-import Data.Int (Int64)
 import Data.List as List (map, concat)
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
@@ -38,8 +37,7 @@ import System.Process (ProcessHandle, CreateProcess(..), StdStream(CreatePipe, I
 
 -- | Class of types which can be used as the input and outputs of
 -- these process functions.
-class (Integral (LengthType a), ListLikeIO a c) => ListLikePlus a c where
-  type LengthType a
+class ListLikeIO a c => ListLikePlus a c where
   setModes :: a -> (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO ()
   -- ^ Perform initialization on the handles returned by createProcess
   -- based on this ListLikePlus instance - typically setting binary
@@ -213,12 +211,10 @@ mkError prefix (ShellCommand cmd) r =
                  Nothing Nothing
 
 instance ListLikePlus L.ByteString Word8 where
-  type LengthType L.ByteString = Int64
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
   readChunks h = hGetContents h >>= evaluate . Prelude.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus LT.Text Char where
-  type LengthType LT.Text = Int64
   setModes _ _  = return ()
   readChunks h = hGetContents h >>= evaluate . Prelude.map (LT.fromChunks . (: [])) . LT.toChunks
 
@@ -228,7 +224,6 @@ instance ListLikePlus LT.Text Char where
 -- process library is strict, while our equivalent is not - see test4
 -- in Tests/Dots.hs.
 instance ListLikePlus String Char where
-  type LengthType String = Int
   setModes _ _  = return ()
   readChunks h = readChunks h >>= return . List.map T.unpack . List.concat . List.map LT.toChunks
 
