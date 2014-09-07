@@ -6,8 +6,11 @@ module System.Process.Chunks
     , foldChunk
     , foldChunks
     , putChunk
-    -- * Canonical
+    -- * Chunk list operators
     , canonicalChunks
+    , collectProcessTriple
+    , collectProcessOutput
+    , withProcessResult
     -- * Indent
     , indentChunks
     , putIndented
@@ -24,7 +27,7 @@ import Control.Monad.State (StateT, evalStateT, evalState, get, put)
 import Control.Monad.Trans (lift)
 import Data.List (foldl')
 import Data.ListLike (ListLike(..), ListLikeIO(..))
-import Data.Monoid ((<>))
+import Data.Monoid ((<>), mempty, mconcat)
 import Prelude hiding (mapM, putStr, null, tail, break, sequence, length, replicate, rem)
 import System.Exit (ExitCode)
 import System.IO (stderr)
@@ -73,7 +76,7 @@ putChunk (Stdout x) = putStr x
 putChunk (Stderr x) = hPutStr stderr x
 putChunk _ = return ()
 
--- | Merge adjacent Stdout or Stderr chunks.
+-- | Merge adjacent and eliminate empty Stdout or Stderr chunks.
 canonicalChunks :: ListLikePlus a c => [Chunk a] -> [Chunk a]
 canonicalChunks [] = []
 canonicalChunks (Stdout a : Stdout b : more) = canonicalChunks (Stdout (a <> b) : more)
@@ -81,6 +84,45 @@ canonicalChunks (Stderr a : Stderr b : more) = canonicalChunks (Stderr (a <> b) 
 canonicalChunks (Stdout a : more) | null a = canonicalChunks more
 canonicalChunks (Stderr a : more) | null a = canonicalChunks more
 canonicalChunks (a : more) = a : canonicalChunks more
+
+-- | Turn the output of 'readProcessChunks' into the output of
+-- 'readProcessWithExitCode'.
+collectProcessTriple :: ListLike a c => [Chunk a] -> (ExitCode, a, a)
+collectProcessTriple chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   (\ o -> (mempty, o, mempty))
+                   (\ e -> (mempty, mempty, e))
+                   (\ _ -> mempty)
+                   (\ code -> (code, mempty, mempty))) chunks
+
+-- | Turn the output of 'readProcessChunks' into the output of
+-- 'readProcess'.  Remember that this does not throw an exception on
+-- exit failure like readProcess, because it is not in the IO monad.
+-- Use 'withProcessResult' to do that.
+collectProcessOutput :: ListLike a c => [Chunk a] -> a
+collectProcessOutput chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   (\ stdout -> stdout)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)) chunks
+
+-- | withProcessResult f input applies f to the result code of input
+-- stream, replacing the Result chunk with the return value of f (or,
+-- as it may happen, throwing an exception.)  See 'pipeProcessChunks'
+-- for an example usage.
+withProcessResult :: (ListLike a c, Monad m) => (ExitCode -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
+withProcessResult f input =
+    mapM (foldChunk
+            (\ p -> return $ ProcessHandle p)
+            (\ s -> return $ Stdout s)
+            (\ s -> return $ Stderr s)
+            (\ e -> return $ Exception e)
+            f) input
 
 -- | The monad state, are we at the beginning of a line or the middle?
 data BOL = BOL | MOL deriving (Eq)
