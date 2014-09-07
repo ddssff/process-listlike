@@ -15,6 +15,7 @@ module System.Process.Chunks
     , dotifyChunk
     , dotifyChunks
     , putDots
+    , putDotsLn
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -147,3 +148,6 @@ dotifyChunks charsPerDot dot chunks =
 putDots :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
 putDots charsPerDot dot chunks =
     evalStateT (mapM (\ x -> dotifyChunk charsPerDot dot x >>= mapM_ (lift . putChunk) >> return x) chunks) 0
+
+putDotsLn :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
+putDotsLn cpd dot chunks = putDots cpd dot chunks >>= \ r -> hPutStr stderr "\n" >> return r
