@@ -25,6 +25,7 @@ Library
   Exposed-modules:
     System.Process.Chunks
     System.Process.ListLike
+    System.Process.ListLike.Class
     System.Process.ByteString
     System.Process.ByteString.Lazy
     System.Process.ListLike.Instances

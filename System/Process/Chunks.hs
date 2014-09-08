@@ -1,7 +1,8 @@
+-- | Support for using the 'Chunk' list returned by 'readProcessChunks'.
 {-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Chunks
-    ( System.Process.ListLike.Chunk(..)
-    , System.Process.ListLike.readProcessChunks
+    ( System.Process.ListLike.Class.Chunk(..)
+    , System.Process.ListLike.Class.readProcessChunks
     , pipeProcessChunks
     -- * Control
     , foldChunk
@@ -44,7 +45,7 @@ import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO (stderr)
 import System.IO.Error (mkIOError)
 import System.Process (ProcessHandle, CreateProcess(cmdspec))
-import System.Process.ListLike (ListLikePlus, showCmdSpecForUser, Chunk(..), readProcessChunks)
+import System.Process.ListLike.Class (ListLikePlus, showCmdSpecForUser, Chunk(..), readProcessChunks)
 
 foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (IOError -> b) -> (ExitCode -> b) -> Chunk a -> b
 foldChunk pidf _ _ _ _ (ProcessHandle x) = pidf x

@@ -2,7 +2,7 @@
 -- 'System.Process.readProcess', and
 -- 'System.Process.readProcessWithExitCode'.
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
-module System.Process.ListLike (
+module System.Process.ListLike.Class (
   ListLikePlus(..),
   readProcessInterleaved,
   readInterleaved,

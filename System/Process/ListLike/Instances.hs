@@ -15,7 +15,7 @@ import Data.Text as T (Text, unpack)
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
 import System.IO (hSetBinaryMode)
-import System.Process.ListLike (ListLikePlus(..))
+import System.Process.ListLike.Class (ListLikePlus(..))
 
 instance ListLikePlus B.ByteString Word8 where
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh

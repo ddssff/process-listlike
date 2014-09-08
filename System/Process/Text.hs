@@ -1,4 +1,6 @@
--- | "System.Process.ListLike" functions restricted to type 'Data.Text.Text'.
+-- | "System.Process.ListLike" functions restricted to type
+-- 'Data.Text.Text'.  gAll the module's supporting functions are also
+-- re-exported here.
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module System.Process.Text
@@ -9,7 +11,7 @@ module System.Process.Text
     , readProcessInterleaved
     , readInterleaved
     , readProcessChunks
-    , module System.Process.ListLike
+    , module System.Process.ListLike.Class
     , module System.Process.Chunks
     ) where
 
@@ -19,10 +21,11 @@ import System.Exit (ExitCode)
 import System.IO (Handle)
 import System.Process (CreateProcess, ProcessHandle)
 import System.Process.Chunks hiding (readProcessChunks)
-import System.Process.ListLike hiding (readProcess, readProcessWithExitCode,
-                                       readCreateProcess, readCreateProcessWithExitCode,
-                                       readProcessInterleaved, readInterleaved, readProcessChunks)
-import qualified System.Process.ListLike as R
+import System.Process.ListLike.Class hiding
+    (readProcess, readProcessWithExitCode,
+     readCreateProcess, readCreateProcessWithExitCode,
+     readProcessInterleaved, readInterleaved, readProcessChunks)
+import qualified System.Process.ListLike.Class as R
 import System.Process.ListLike.Instances ()
 
 readProcess :: (a ~ Text) => FilePath -> [String] -> a -> IO a
