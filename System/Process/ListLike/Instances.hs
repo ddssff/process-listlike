@@ -1,20 +1,29 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies, TypeSynonymInstances #-}
+-- | ListLikePlus instances for strict types - these are more
+-- dangerous, if you start a long running process with them they will
+-- block until the process finishes.  Why not try a lazy type?
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module System.Process.Lazy where
+module System.Process.ListLike.Instances where
 
+import Control.DeepSeq (force)
 import Control.Exception as E (evaluate)
-import Control.Monad
+import Data.ByteString.Char8 as B (ByteString)
 import qualified Data.ByteString.Lazy as L
 import Data.List as List (map, concat)
-import Data.ListLike (ListLikeIO(..))
-import Data.ListLike.Text.Text ()
-import Data.ListLike.Text.TextLazy ()
-import qualified Data.Text as T
+import Data.ListLike.IO (hGetContents)
+import Data.Text as T (Text, unpack)
 import qualified Data.Text.Lazy as LT
 import Data.Word (Word8)
-import Prelude hiding (null, length, rem)
-import System.IO hiding (hPutStr, hGetContents)
+import System.IO (hSetBinaryMode)
 import System.Process.ListLike (ListLikePlus(..))
+
+instance ListLikePlus B.ByteString Word8 where
+  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
+  readChunks h = hGetContents h >>= return . force . (: [])
+
+instance ListLikePlus T.Text Char where
+  setModes _ _  = return ()
+  readChunks h = hGetContents h >>= return . force . (: [])
 
 instance ListLikePlus L.ByteString Word8 where
   setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh

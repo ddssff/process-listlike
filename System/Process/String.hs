@@ -17,12 +17,12 @@ import Data.Monoid (Monoid)
 import System.Exit (ExitCode)
 import System.IO (Handle)
 import System.Process (CreateProcess, ProcessHandle)
-import qualified System.Process.ListLike as R
+import System.Process.Chunks hiding (readProcessChunks)
 import System.Process.ListLike hiding (readProcess, readProcessWithExitCode,
                                        readCreateProcess, readCreateProcessWithExitCode,
                                        readProcessInterleaved, readInterleaved, readProcessChunks)
-import System.Process.Chunks hiding (readProcessChunks)
-import System.Process.Lazy ()
+import qualified System.Process.ListLike as R
+import System.Process.ListLike.Instances ()
 
 readProcess :: (a ~ String) => FilePath -> [String] -> a -> IO a
 readProcess = R.readProcess
