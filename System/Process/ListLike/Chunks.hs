@@ -1,6 +1,6 @@
 -- | Support for using the 'Chunk' list returned by 'readProcessChunks'.
 {-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
-module System.Process.Chunks
+module System.Process.ListLike.Chunks
     ( System.Process.ListLike.Class.Chunk(..)
     , System.Process.ListLike.Class.readProcessChunks
     , pipeProcessChunks

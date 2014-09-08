@@ -12,7 +12,7 @@ module System.Process.Text.Lazy
     , readInterleaved
     , readProcessChunks
     , module System.Process.ListLike.Class
-    , module System.Process.Chunks
+    , module System.Process.ListLike.Chunks
     ) where
 
 import Data.Text.Lazy (Text)
@@ -20,7 +20,7 @@ import Data.Monoid (Monoid)
 import System.Exit (ExitCode)
 import System.IO (Handle)
 import System.Process (CreateProcess, ProcessHandle)
-import System.Process.Chunks hiding (readProcessChunks)
+import System.Process.ListLike.Chunks hiding (readProcessChunks)
 import System.Process.ListLike.Class hiding
     (readProcess, readProcessWithExitCode,
      readCreateProcess, readCreateProcessWithExitCode,

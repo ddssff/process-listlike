@@ -1,3 +1,15 @@
+haskell-process-listlike (1.0) unstable; urgency=low
+
+  * Merge the two instance modules into System.Process.ListLike.Instances,
+  * Move System.Process.ListLike to System.Process.ListLike.Class
+  * Add a new re-exporting module System.Process.ListLike
+  * Make each of the restricted modules re-export all the support functions
+  * Move readInterleaved, readProcessInterleaved, readProcessChunks from
+    System.Process.Chunks to System.Process.ListLike.Class
+  * Move System.Process.Chunks to System.Process.ListLike.Chunks.
+
+ -- David Fox <dsf@seereason.com>  Mon, 08 Sep 2014 08:53:41 -0700
+
 haskell-process-listlike (0.9.2) unstable; urgency=low
 
   * Move the Chunks type declaration and the readProcessChunks function
