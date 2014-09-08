@@ -204,9 +204,9 @@ indentChunk nl outp errp chunk =
         return $ (if bol == BOL then [con pre] else []) <> [con (singleton nl)] <> tl
 
 -- | Pure function to indent the text of a chunk list.
-indentChunks :: forall a c. (ListLikePlus a c, Eq c, IsString a) => a -> a -> [Chunk a] -> [Chunk a]
+indentChunks :: forall a c. (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> [Chunk a]
 indentChunks outp errp chunks =
-    evalState (Prelude.concat <$> mapM (indentChunk nl outp errp) chunks) BOL
+    evalState (Prelude.concat <$> mapM (indentChunk nl (fromString outp) (fromString errp)) chunks) BOL
     where
       nl :: c
       nl = Data.ListLike.head (fromString "\n" :: a)
@@ -221,20 +221,20 @@ showCommandChunks p chunks =
                  ((: []) . Exception)
                  (\ code -> [Stderr (fromString (" <- " ++ show code ++ " <- " ++ showCmdSpecForUser (cmdspec p) ++ "\n")), Result code])) chunks
 
-putIndentedShowCommand :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> a -> a -> [Chunk a] -> IO [Chunk a]
+putIndentedShowCommand :: (ListLikePlus a c, Eq c, IsString a) => CreateProcess -> String -> String -> [Chunk a] -> IO [Chunk a]
 putIndentedShowCommand p outp errp chunks = do
   mapM_ putChunk (showCommandChunks p (indentChunks outp errp chunks))
   return chunks
 
 -- | Output the indented text of a chunk list, but return the original
 -- unindented list.  Returns the original chunks.
-putIndented :: (ListLikePlus a c, Eq c, IsString a) => a -> a -> [Chunk a] -> IO [Chunk a]
+putIndented :: (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> IO [Chunk a]
 putIndented = mapIndented putChunk
 
 -- | Map chunkfn over the indented chunk stream, returns the original chunks.
-mapIndented :: forall a c m. (ListLikePlus a c, Eq c, IsString a, Monad m, Functor m) => (Chunk a -> m ()) -> a -> a -> [Chunk a] -> m [Chunk a]
+mapIndented :: forall a c m. (ListLikePlus a c, Eq c, IsString a, Monad m, Functor m) => (Chunk a -> m ()) -> String -> String -> [Chunk a] -> m [Chunk a]
 mapIndented chunkfn outp errp chunks =
-    evalStateT (mapM (\ x -> indentChunk nl outp errp x >>= mapM_ (lift . chunkfn) >> return x) chunks) BOL
+    evalStateT (mapM (\ x -> indentChunk nl (fromString outp) (fromString errp) x >>= mapM_ (lift . chunkfn) >> return x) chunks) BOL
     where
       nl :: c
       nl = Data.ListLike.head (fromString "\n" :: a)
