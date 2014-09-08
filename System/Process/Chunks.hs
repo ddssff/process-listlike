@@ -12,6 +12,8 @@ module System.Process.Chunks
     , collectProcessTriple
     , collectProcessOutput'
     , collectProcessOutput
+    , collectOutputAndError'
+    , collectOutputAndError
     , withProcessResult
     , withProcessException
     , throwProcessResult
@@ -122,6 +124,16 @@ collectProcessOutput chunks =
                    (\ _ -> mempty)
                    (\ _ -> mempty)) chunks
 
+collectOutputAndError :: ListLike a c => [Chunk a] -> a
+collectOutputAndError chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   (\ stdout -> stdout)
+                   (\ stderr -> stderr)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)) chunks
+
 -- | withProcessResult f input applies f to the result code of input
 -- stream, replacing the Result chunk with the return value of f (or,
 -- as it may happen, throwing an exception.)  See 'pipeProcessChunks'
@@ -158,6 +170,10 @@ pipeProcessChunks p input = collectProcessOutput' p input >>= readProcessChunks 
 collectProcessOutput' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
 collectProcessOutput' p chunks =
     withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectProcessOutput
+
+collectOutputAndError' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
+collectOutputAndError' p chunks =
+    withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectOutputAndError
 
 -- | Based on the 'ExitCode', either return a Result Chunk or throw an
 -- IO error similar to what 'System.Process.readProcess' would have
