@@ -6,6 +6,7 @@ module System.Process.String
     , readProcessWithExitCode
     , readCreateProcess
     , readCreateProcessWithExitCode
+    , readProcessChunks
     ) where
 
 import System.Exit (ExitCode)
