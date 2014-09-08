@@ -1,3 +1,11 @@
+haskell-process-listlike (0.9.2) unstable; urgency=low
+
+  * Move the Chunks type declaration and the readProcessChunks function
+    from Chunks.hs back into ListLike.hs, export versions of it from all
+    the instance-specific modules.
+
+ -- David Fox <dsf@seereason.com>  Mon, 08 Sep 2014 06:06:03 -0700
+
 haskell-process-listlike (0.9.1) unstable; urgency=low
 
   * Add functions to System.Process.Chunks: pipeProcessChunks,
