@@ -23,6 +23,9 @@ module System.Process.Chunks
     , dotifyChunks
     , putDots
     , putDotsLn
+    -- * Display command and arguments
+    , showCommandChunks
+    , putIndentedShowCommand
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -32,6 +35,7 @@ import Control.Monad.Trans (lift)
 import Data.List (foldl')
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.Monoid ((<>), mempty, mconcat)
+import Data.String (IsString(fromString))
 import GHC.IO.Exception (IOErrorType(OtherError))
 import Prelude hiding (mapM, putStr, null, tail, break, sequence, length, replicate, rem)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -204,12 +208,27 @@ indentChunks :: (ListLikePlus a c, Eq c) => c -> a -> a -> [Chunk a] -> [Chunk a
 indentChunks nl outp errp chunks =
     evalState (Prelude.concat <$> mapM (indentChunk nl outp errp) chunks) BOL
 
+showCommandChunks :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+showCommandChunks p chunks =
+    [Stderr (fromString (" -> " ++ showCmdSpecForUser (cmdspec p) ++ "\n"))] ++
+    Prelude.concatMap
+      (foldChunk ((: []) . ProcessHandle)
+                 ((: []) . Stdout)
+                 ((: []) . Stderr)
+                 ((: []) . Exception)
+                 (\ code -> [Stderr (fromString (" <- " ++ show code ++ " <- " ++ showCmdSpecForUser (cmdspec p) ++ "\n")), Result code])) chunks
+
+putIndentedShowCommand :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> c -> a -> a -> [Chunk a] -> IO [Chunk a]
+putIndentedShowCommand p nl outp errp chunks = do
+  mapM_ putChunk (showCommandChunks p (indentChunks nl outp errp chunks))
+  return chunks
+
 -- | Output the indented text of a chunk list, but return the original
--- unindented list.
+-- unindented list.  Returns the original chunks.
 putIndented :: (ListLikePlus a c, Eq c) => c -> a -> a -> [Chunk a] -> IO [Chunk a]
 putIndented = mapIndented putChunk
 
--- | Map chunkfn over the indented chunk stream.
+-- | Map chunkfn over the indented chunk stream, returns the original chunks.
 mapIndented :: (ListLikePlus a c, Eq c, Monad m, Functor m) => (Chunk a -> m ()) -> c -> a -> a -> [Chunk a] -> m [Chunk a]
 mapIndented chunkfn nl outp errp chunks =
     evalStateT (mapM (\ x -> indentChunk nl outp errp x >>= mapM_ (lift . chunkfn) >> return x) chunks) BOL

@@ -78,6 +78,8 @@ readInterleaved' start pairs finish res = do
   r <- takeChunks (length pairs)
   return $ start <> r
     where
+      -- Forked thread to read the input and send it to takeChunks via
+      -- the MVar.
       readHandle :: (a -> b) -> Handle -> IO ()
       readHandle f h = do
         cs <- readChunks h
