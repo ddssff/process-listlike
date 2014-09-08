@@ -21,3 +21,5 @@ readCreateProcess :: (a ~ String) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ String) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
+readProcessChunks :: (a ~ String) => CreateProcess -> a -> IO [R.Chunk a]
+readProcessChunks = R.readProcessChunks

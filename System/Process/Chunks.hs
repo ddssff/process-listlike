@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
 module System.Process.Chunks
-    ( Chunk(..)
-    , readProcessChunks
+    ( System.Process.ListLike.Chunk(..)
+    , System.Process.ListLike.readProcessChunks
     , pipeProcessChunks
     -- * Control
     , foldChunk
@@ -32,7 +32,6 @@ module System.Process.Chunks
     ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.DeepSeq (NFData)
 import Control.Monad.State (StateT, evalStateT, evalState, get, put)
 import Control.Monad.Trans (lift)
 import Data.List (foldl')
@@ -45,32 +44,7 @@ import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO (stderr)
 import System.IO.Error (mkIOError)
 import System.Process (ProcessHandle, CreateProcess(cmdspec))
-import System.Process.ListLike (ListLikePlus, readProcessInterleaved, showCmdSpecForUser)
-
--- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
--- of data returned by 'readProcessChunks'.
-instance NFData ExitCode
-
--- | The output stream of a process returned by 'readProcessChunks'.
-data Chunk a
-    = ProcessHandle ProcessHandle -- ^ This will always come first
-    | Stdout a
-    | Stderr a
-    | Exception IOError
-    | Result ExitCode
-    deriving Show
-
--- Is this rude?  It will collide with any other bogus Show
--- ProcessHandle instances created elsewhere.
-instance Show ProcessHandle where
-    show _ = "<processhandle>"
-
--- | A concrete use of 'readProcessInterleaved' - build a list
--- containing chunks of process output, any exceptions that get thrown
--- (unimplemented), and finally an exit code.
-readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
-readProcessChunks p input =
-    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
+import System.Process.ListLike (ListLikePlus, showCmdSpecForUser, Chunk(..), readProcessChunks)
 
 foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (IOError -> b) -> (ExitCode -> b) -> Chunk a -> b
 foldChunk pidf _ _ _ _ (ProcessHandle x) = pidf x
@@ -129,8 +103,8 @@ collectOutputAndError chunks =
     mconcat $ Prelude.map
                 (foldChunk
                    (\ _ -> mempty)
-                   (\ stdout -> stdout)
-                   (\ stderr -> stderr)
+                   (\ o -> o)
+                   (\ e -> e)
                    (\ _ -> mempty)
                    (\ _ -> mempty)) chunks
 

@@ -10,10 +10,13 @@ module System.Process.ListLike (
   readCreateProcess,
   readProcessWithExitCode,
   readProcess,
-  showCmdSpecForUser
+  showCmdSpecForUser,
+  Chunk(..),
+  readProcessChunks
   ) where
 
 import Control.Concurrent
+import Control.DeepSeq (NFData)
 import Control.Exception as E (SomeException, onException, catch, try, throwIO, mask, throw)
 import Control.Monad
 import Data.ListLike (ListLike(..), ListLikeIO(..))
@@ -29,6 +32,13 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process (ProcessHandle, CreateProcess(..), StdStream(CreatePipe, Inherit), proc,
                        CmdSpec(RawCommand, ShellCommand), showCommandForUser,
                        createProcess, waitForProcess, terminateProcess)
+
+-- | A process should have one 'ExitCode' at the end, this monoid lets
+-- us build a monoid for the type returned by readProcessWithExitCode.
+instance Monoid ExitCode where
+    mempty = ExitFailure 0
+    mappend x (ExitFailure 0) = x
+    mappend _ x = x
 
 -- | Class of types which can be used as the input and outputs of
 -- these process functions.
@@ -176,6 +186,31 @@ readCreateProcess p input = mask $ \restore -> do
       codef (ExitFailure r) = throw (mkError "readCreateProcess: " (cmdspec p) r)
       codef ExitSuccess = return mempty
 
+-- | The output stream of a process returned by 'readProcessChunks'.
+data Chunk a
+    = ProcessHandle ProcessHandle -- ^ This will always come first
+    | Stdout a
+    | Stderr a
+    | Exception IOError
+    | Result ExitCode
+    deriving Show
+
+-- | A concrete use of 'readProcessInterleaved' - build a list
+-- containing chunks of process output, any exceptions that get thrown
+-- (unimplemented), and finally an exit code.
+readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
+readProcessChunks p input =
+    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
+
+-- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
+-- of data returned by 'readProcessChunks'.
+instance NFData ExitCode
+
+-- Is this rude?  It will collide with any other bogus Show
+-- ProcessHandle instances created elsewhere.
+instance Show ProcessHandle where
+    show _ = "<processhandle>"
+
 -- | Write and flush process input, closing the handle when done.
 -- Catch and ignore Resource Vanished exceptions, they just mean the
 -- process exited before all of its output was read.
@@ -206,13 +241,6 @@ mkError prefix (RawCommand cmd args) r =
 mkError prefix (ShellCommand cmd) r =
     IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
                  Nothing Nothing
-
--- | A chunk stream should have an 'ExitCode' at the end, this monoid lets
--- us build a monoid for the type returned by readProcessWithExitCode.
-instance Monoid ExitCode where
-    mempty = ExitFailure 0
-    mappend x (ExitFailure 0) = x
-    mappend _ x = x
 
 showCmdSpecForUser :: CmdSpec -> String
 showCmdSpecForUser (ShellCommand s) = s

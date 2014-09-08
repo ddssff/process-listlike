@@ -6,6 +6,7 @@ module System.Process.ByteString
     , readProcessWithExitCode
     , readCreateProcess
     , readCreateProcessWithExitCode
+    , readProcessChunks
     ) where
 
 import Data.ByteString.Char8 (ByteString)
@@ -22,3 +23,5 @@ readCreateProcess :: (a ~ ByteString) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ ByteString) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
+readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [R.Chunk a]
+readProcessChunks = R.readProcessChunks

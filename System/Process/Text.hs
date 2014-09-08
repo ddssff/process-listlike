@@ -6,6 +6,7 @@ module System.Process.Text
     , readProcessWithExitCode
     , readCreateProcess
     , readCreateProcessWithExitCode
+    , readProcessChunks
     ) where
 
 import Data.Text (Text)
@@ -22,3 +23,5 @@ readCreateProcess :: (a ~ Text) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ Text) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
+readProcessChunks :: (a ~ Text) => CreateProcess -> a -> IO [R.Chunk a]
+readProcessChunks = R.readProcessChunks
