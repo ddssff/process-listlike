@@ -28,7 +28,8 @@ module System.Process.ListLike.Chunks
     , putDots
     , putDotsLn
     -- * Display command and arguments
-    , showCommandChunks
+    , displayCreateProcess
+    , insertCommandDisplay
     , putIndentedShowCommand
     ) where
 
@@ -44,7 +45,7 @@ import Prelude hiding (mapM, putStr, null, tail, break, sequence, length, replic
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO (stderr)
 import System.IO.Error (mkIOError)
-import System.Process (ProcessHandle, CreateProcess(cmdspec))
+import System.Process (ProcessHandle, CreateProcess(cmdspec, cwd))
 import System.Process.ListLike.Class (ListLikePlus, showCmdSpecForUser, Chunk(..), readProcessChunks)
 
 foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (IOError -> b) -> (ExitCode -> b) -> Chunk a -> b
@@ -208,9 +209,14 @@ indentChunks outp errp chunks =
       nl :: c
       nl = Data.ListLike.head (fromString "\n" :: a)
 
-showCommandChunks :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
-showCommandChunks p chunks =
-    [Stderr (fromString (" -> " ++ showCmdSpecForUser (cmdspec p) ++ "\n"))] ++
+displayCreateProcess :: CreateProcess -> String
+displayCreateProcess p = showCmdSpecForUser (cmdspec p) ++ maybe "" (\ d -> " (in " ++ d ++ ")") (cwd p)
+
+-- | Add bracketing chunks displaying the command and its arguments at
+-- the beginning, and the result code at the end.
+insertCommandDisplay :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+insertCommandDisplay p chunks =
+    [Stderr (fromString (" -> " ++ displayCreateProcess p ++ "\n"))] ++
     Prelude.concatMap
       (foldChunk ((: []) . ProcessHandle)
                  ((: []) . Stdout)
@@ -220,7 +226,7 @@ showCommandChunks p chunks =
 
 putIndentedShowCommand :: (ListLikePlus a c, Eq c, IsString a) => CreateProcess -> String -> String -> [Chunk a] -> IO [Chunk a]
 putIndentedShowCommand p outp errp chunks = do
-  mapM_ putChunk (showCommandChunks p (indentChunks outp errp chunks))
+  mapM_ putChunk (insertCommandDisplay p (indentChunks outp errp chunks))
   return chunks
 
 -- | Output the indented text of a chunk list, but return the original
