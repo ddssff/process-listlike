@@ -11,6 +11,8 @@ module System.Process.ListLike.Chunks
     , canonicalChunks
     , indentChunks
     , dotifyChunks
+    , insertCommandStart
+    , insertCommandResult
     , insertCommandDisplay
     , eraseStdout
     , eraseStderr
@@ -142,15 +144,29 @@ dotifyChunk charsPerDot dot chunk =
 
 -- | Add bracketing chunks displaying the command and its arguments at
 -- the beginning, and the result code at the end.
-insertCommandDisplay :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
-insertCommandDisplay p chunks =
+insertCommandStart :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+insertCommandStart p chunks =
     [Stderr (fromString (" -> " ++ displayCreateProcess p ++ "\n"))] ++
     Prelude.concatMap
       (foldChunk ((: []) . ProcessHandle)
                  ((: []) . Stdout)
                  ((: []) . Stderr)
                  ((: []) . Exception)
+                 ((: []) . Result)) chunks
+
+-- | Add bracketing chunks displaying the command and its arguments at
+-- the beginning, and the result code at the end.
+insertCommandResult :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+insertCommandResult p chunks =
+    Prelude.concatMap
+      (foldChunk ((: []) . ProcessHandle)
+                 ((: []) . Stdout)
+                 ((: []) . Stderr)
+                 ((: []) . Exception)
                  (\ code -> [Stderr (fromString (" <- " ++ show code ++ " <- " ++ showCmdSpecForUser (cmdspec p) ++ "\n")), Result code])) chunks
+
+insertCommandDisplay :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+insertCommandDisplay p = insertCommandResult p . insertCommandStart p
 
 eraseStdout :: Monoid a => [Chunk a] -> [Chunk a]
 eraseStdout = Prelude.map (foldChunk ProcessHandle
