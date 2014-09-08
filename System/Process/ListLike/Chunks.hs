@@ -1,44 +1,54 @@
 -- | Support for using the 'Chunk' list returned by 'readProcessChunks'.
 {-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
 module System.Process.ListLike.Chunks
-    ( System.Process.ListLike.Class.Chunk(..)
+    ( -- * Re-exports
+      System.Process.ListLike.Class.Chunk(..)
     , System.Process.ListLike.Class.readProcessChunks
-    , pipeProcessChunks
-    -- * Control
+    -- * Folds
     , foldChunk
     , foldChunks
-    , putChunk
-    -- * Chunk list operators
+    -- * Pure Chunk List Combinators
     , canonicalChunks
+    , indentChunks
+    , dotifyChunks
+    , insertCommandDisplay
+    , eraseStdout
+    , eraseStderr
+    , eraseOutput
+    , mergeToStderr
+    , mergeToStdout
+    -- * Chunk List Functions
     , collectProcessTriple
-    , collectProcessOutput'
     , collectProcessOutput
-    , collectOutputAndError'
     , collectOutputAndError
+    , collectExitCode
+    -- * Monadic Chunk List Combinators
     , withProcessResult
     , withProcessException
+    -- * IO
+    , putChunk
     , throwProcessResult
-    -- * Indent
-    , indentChunks
+    , collectProcessOutput'
+    , collectOutputAndError'
+    , throwExitCode
+    -- * IO Chunk List Combinators
+    , pipeProcessChunks
+    , putMappedChunks
     , putIndented
-    , mapIndented
-    -- * Dotify
-    , dotifyChunk
-    , dotifyChunks
     , putDots
     , putDotsLn
-    -- * Display command and arguments
-    , displayCreateProcess
-    , insertCommandDisplay
     , putIndentedShowCommand
+    -- * CreateProcess utility function
+    , displayCreateProcess
     ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Monad (void)
 import Control.Monad.State (StateT, evalStateT, evalState, get, put)
 import Control.Monad.Trans (lift)
 import Data.List (foldl')
 import Data.ListLike (ListLike(..), ListLikeIO(..))
-import Data.Monoid ((<>), mempty, mconcat)
+import Data.Monoid (Monoid, (<>), mempty, mconcat)
 import Data.String (IsString(fromString))
 import GHC.IO.Exception (IOErrorType(OtherError))
 import Prelude hiding (mapM, putStr, null, tail, break, sequence, length, replicate, rem)
@@ -59,12 +69,6 @@ foldChunk _ _ _ _ exitf (Result x) = exitf x
 foldChunks :: (r -> Chunk a -> r) -> r -> [Chunk a] -> r
 foldChunks f r0 xs = foldl' f r0 xs
 
--- | Write the Stdout chunks to stdout and the Stderr chunks to stderr.
-putChunk :: ListLikePlus a c => Chunk a -> IO ()
-putChunk (Stdout x) = putStr x
-putChunk (Stderr x) = hPutStr stderr x
-putChunk _ = return ()
-
 -- | Merge adjacent and eliminate empty Stdout or Stderr chunks.
 canonicalChunks :: ListLikePlus a c => [Chunk a] -> [Chunk a]
 canonicalChunks [] = []
@@ -74,99 +78,13 @@ canonicalChunks (Stdout a : more) | null a = canonicalChunks more
 canonicalChunks (Stderr a : more) | null a = canonicalChunks more
 canonicalChunks (a : more) = a : canonicalChunks more
 
--- | Turn the output of 'readProcessChunks' into the output of
--- 'readProcessWithExitCode'.
-collectProcessTriple :: ListLike a c => [Chunk a] -> (ExitCode, a, a)
-collectProcessTriple chunks =
-    mconcat $ Prelude.map
-                (foldChunk
-                   (\ _ -> mempty)
-                   (\ o -> (mempty, o, mempty))
-                   (\ e -> (mempty, mempty, e))
-                   (\ _ -> mempty)
-                   (\ code -> (code, mempty, mempty))) chunks
-
--- | Turn the output of 'readProcessChunks' into the output of
--- 'readProcess'.  Remember that this does not throw an exception on
--- exit failure like readProcess, because it is not in the IO monad.
--- Use 'pipeProcessChunks' to do that.
-collectProcessOutput :: ListLike a c => [Chunk a] -> a
-collectProcessOutput chunks =
-    mconcat $ Prelude.map
-                (foldChunk
-                   (\ _ -> mempty)
-                   (\ stdout -> stdout)
-                   (\ _ -> mempty)
-                   (\ _ -> mempty)
-                   (\ _ -> mempty)) chunks
-
-collectOutputAndError :: ListLike a c => [Chunk a] -> a
-collectOutputAndError chunks =
-    mconcat $ Prelude.map
-                (foldChunk
-                   (\ _ -> mempty)
-                   (\ o -> o)
-                   (\ e -> e)
-                   (\ _ -> mempty)
-                   (\ _ -> mempty)) chunks
-
--- | withProcessResult f input applies f to the result code of input
--- stream, replacing the Result chunk with the return value of f (or,
--- as it may happen, throwing an exception.)  See 'pipeProcessChunks'
--- for an example usage.
-withProcessResult :: (ListLike a c, Monad m) => (ExitCode -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
-withProcessResult f input =
-    mapM (foldChunk
-            (return . ProcessHandle)
-            (return . Stdout)
-            (return . Stderr)
-            (return . Exception)
-            f) input
-
--- | withProcessException f input applies f to the exceptions it finds
--- in the input stream, replacing the Exceptoin chunk with the return
--- value of f (or, as it may happen, throwing an exception.)
-withProcessException :: (ListLike a c, Monad m) => (IOError -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
-withProcessException f input =
-    mapM (foldChunk
-            (return . ProcessHandle)
-            (return . Stdout)
-            (return . Stderr)
-            f
-            (return . Result)) input
-
--- | Turn the standard output of one process into the input of
--- another, throwing an IO exception if the input process result code
--- is ExitFailure.
-pipeProcessChunks :: (ListLikePlus a c) => CreateProcess -> [Chunk a] -> IO [Chunk a]
-pipeProcessChunks p input = collectProcessOutput' p input >>= readProcessChunks p
-
--- | A version of collectProcessOutput which throws an exception of
--- the exit code is ExitFailure.
-collectProcessOutput' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
-collectProcessOutput' p chunks =
-    withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectProcessOutput
-
-collectOutputAndError' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
-collectOutputAndError' p chunks =
-    withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectOutputAndError
-
--- | Based on the 'ExitCode', either return a Result Chunk or throw an
--- IO error similar to what 'System.Process.readProcess' would have
--- thrown.
-throwProcessResult :: String -> String -> ExitCode -> IO (Chunk a)
-throwProcessResult _ _ ExitSuccess = return $ Result ExitSuccess
-throwProcessResult fun cmd (ExitFailure code) = processFailedException fun cmd [] code
-
--- | Copied from "System.Process", the exception thrown when the
--- process started by 'System.Process.readProcess' gets an
--- 'ExitFailure'.
-processFailedException :: String -> String -> [String] -> Int -> IO a
-processFailedException fun cmd args exit_code =
-      ioError (mkIOError OtherError (fun ++ ": " ++ cmd ++
-                                     Prelude.concatMap ((' ':) . show) args ++
-                                     " (exit " ++ show exit_code ++ ")")
-                                 Nothing Nothing)
+-- | Pure function to indent the text of a chunk list.
+indentChunks :: forall a c. (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> [Chunk a]
+indentChunks outp errp chunks =
+    evalState (Prelude.concat <$> mapM (indentChunk nl (fromString outp) (fromString errp)) chunks) BOL
+    where
+      nl :: c
+      nl = Data.ListLike.head (fromString "\n" :: a)
 
 -- | The monad state, are we at the beginning of a line or the middle?
 data BOL = BOL | MOL deriving (Eq)
@@ -201,46 +119,9 @@ indentChunk nl outp errp chunk =
         tl <- doText con pre (tail x)
         return $ (if bol == BOL then [con pre] else []) <> [con (singleton nl)] <> tl
 
--- | Pure function to indent the text of a chunk list.
-indentChunks :: forall a c. (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> [Chunk a]
-indentChunks outp errp chunks =
-    evalState (Prelude.concat <$> mapM (indentChunk nl (fromString outp) (fromString errp)) chunks) BOL
-    where
-      nl :: c
-      nl = Data.ListLike.head (fromString "\n" :: a)
-
-displayCreateProcess :: CreateProcess -> String
-displayCreateProcess p = showCmdSpecForUser (cmdspec p) ++ maybe "" (\ d -> " (in " ++ d ++ ")") (cwd p)
-
--- | Add bracketing chunks displaying the command and its arguments at
--- the beginning, and the result code at the end.
-insertCommandDisplay :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
-insertCommandDisplay p chunks =
-    [Stderr (fromString (" -> " ++ displayCreateProcess p ++ "\n"))] ++
-    Prelude.concatMap
-      (foldChunk ((: []) . ProcessHandle)
-                 ((: []) . Stdout)
-                 ((: []) . Stderr)
-                 ((: []) . Exception)
-                 (\ code -> [Stderr (fromString (" <- " ++ show code ++ " <- " ++ showCmdSpecForUser (cmdspec p) ++ "\n")), Result code])) chunks
-
-putIndentedShowCommand :: (ListLikePlus a c, Eq c, IsString a) => CreateProcess -> String -> String -> [Chunk a] -> IO [Chunk a]
-putIndentedShowCommand p outp errp chunks = do
-  mapM_ putChunk (insertCommandDisplay p (indentChunks outp errp chunks))
-  return chunks
-
--- | Output the indented text of a chunk list, but return the original
--- unindented list.  Returns the original chunks.
-putIndented :: (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> IO [Chunk a]
-putIndented = mapIndented putChunk
-
--- | Map chunkfn over the indented chunk stream, returns the original chunks.
-mapIndented :: forall a c m. (ListLikePlus a c, Eq c, IsString a, Monad m, Functor m) => (Chunk a -> m ()) -> String -> String -> [Chunk a] -> m [Chunk a]
-mapIndented chunkfn outp errp chunks =
-    evalStateT (mapM (\ x -> indentChunk nl (fromString outp) (fromString errp) x >>= mapM_ (lift . chunkfn) >> return x) chunks) BOL
-    where
-      nl :: c
-      nl = Data.ListLike.head (fromString "\n" :: a)
+dotifyChunks :: forall a c. (ListLikePlus a c) => Int -> c -> [Chunk a] -> [Chunk a]
+dotifyChunks charsPerDot dot chunks =
+    evalState (Prelude.concat <$> mapM (dotifyChunk charsPerDot dot) chunks) 0
 
 -- | dotifyChunk charsPerDot dot chunk - Replaces every charsPerDot
 -- characters in the Stdout and Stderr chunks with one dot.  Runs in
@@ -259,9 +140,173 @@ dotifyChunk charsPerDot dot chunk =
         put rem'
         if (count' > 0) then return [Stderr (replicate count' dot)] else return []
 
-dotifyChunks :: forall a c. (ListLikePlus a c) => Int -> c -> [Chunk a] -> [Chunk a]
-dotifyChunks charsPerDot dot chunks =
-    evalState (Prelude.concat <$> mapM (dotifyChunk charsPerDot dot) chunks) 0
+-- | Add bracketing chunks displaying the command and its arguments at
+-- the beginning, and the result code at the end.
+insertCommandDisplay :: (IsString a, ListLikePlus a c, Eq c) => CreateProcess -> [Chunk a] -> [Chunk a]
+insertCommandDisplay p chunks =
+    [Stderr (fromString (" -> " ++ displayCreateProcess p ++ "\n"))] ++
+    Prelude.concatMap
+      (foldChunk ((: []) . ProcessHandle)
+                 ((: []) . Stdout)
+                 ((: []) . Stderr)
+                 ((: []) . Exception)
+                 (\ code -> [Stderr (fromString (" <- " ++ show code ++ " <- " ++ showCmdSpecForUser (cmdspec p) ++ "\n")), Result code])) chunks
+
+eraseStdout :: Monoid a => [Chunk a] -> [Chunk a]
+eraseStdout = Prelude.map (foldChunk ProcessHandle
+                                     (\ _ -> Stdout mempty)
+                                     Stderr
+                                     Exception
+                                     Result)
+
+eraseStderr :: Monoid a => [Chunk a] -> [Chunk a]
+eraseStderr = Prelude.map (foldChunk ProcessHandle
+                                     Stdout
+                                     (\ _ -> Stderr mempty)
+                                     Exception
+                                     Result)
+
+eraseOutput :: Monoid a => [Chunk a] -> [Chunk a]
+eraseOutput = Prelude.map (foldChunk ProcessHandle
+                                     (\ _ -> Stdout mempty)
+                                     (\ _ -> Stderr mempty)
+                                     Exception
+                                     Result)
+
+mergeToStdout :: [Chunk a] -> [Chunk a]
+mergeToStdout = Prelude.map (foldChunk ProcessHandle Stdout Stdout Exception Result)
+
+mergeToStderr :: [Chunk a] -> [Chunk a]
+mergeToStderr = Prelude.map (foldChunk ProcessHandle Stderr Stderr Exception Result)
+
+-- | Turn the output of 'readProcessChunks' into the output of
+-- 'readProcessWithExitCode'.
+collectProcessTriple :: ListLike a c => [Chunk a] -> (ExitCode, a, a)
+collectProcessTriple chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   (\ o -> (mempty, o, mempty))
+                   (\ e -> (mempty, mempty, e))
+                   (\ _ -> mempty)
+                   (\ code -> (code, mempty, mempty))) chunks
+
+-- | Turn the output of 'readProcessChunks' into the output of
+-- 'readProcess'.  Remember that this does not throw an exception on
+-- exit failure like readProcess, because it is not in the IO monad.
+-- Use 'pipeProcessChunks' to do that.
+collectProcessOutput :: ListLike a c => [Chunk a] -> a
+collectProcessOutput chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   id
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)) chunks
+
+collectOutputAndError :: ListLike a c => [Chunk a] -> a
+collectOutputAndError chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   id
+                   id
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)) chunks
+
+collectExitCode :: ListLike a c => [Chunk a] -> ExitCode
+collectExitCode chunks =
+    mconcat $ Prelude.map
+                (foldChunk
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)
+                   (\ _ -> mempty)
+                   id) chunks
+
+-- | withProcessResult f input applies f to the result code of input
+-- stream, replacing the Result chunk with the return value of f (or,
+-- as it may happen, throwing an exception.)  See 'pipeProcessChunks'
+-- for an example usage.
+withProcessResult :: (ListLike a c, Monad m) => (ExitCode -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
+withProcessResult f input =
+    mapM (foldChunk
+            (return . ProcessHandle)
+            (return . Stdout)
+            (return . Stderr)
+            (return . Exception)
+            f) input
+
+-- | withProcessException f input applies f to the exceptions it finds
+-- in the input stream, replacing the Exceptoin chunk with the return
+-- value of f (or, as it may happen, throwing an exception.)
+withProcessException :: (ListLike a c, Monad m) => (IOError -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
+withProcessException f input =
+    mapM (foldChunk
+            (return . ProcessHandle)
+            (return . Stdout)
+            (return . Stderr)
+            f
+            (return . Result)) input
+
+-- | Write the Stdout chunks to stdout and the Stderr chunks to stderr.
+putChunk :: ListLikePlus a c => Chunk a -> IO ()
+putChunk (Stdout x) = putStr x
+putChunk (Stderr x) = hPutStr stderr x
+putChunk _ = return ()
+
+-- | Based on the 'ExitCode', either return a Result Chunk or throw an
+-- IO error similar to what 'System.Process.readProcess' would have
+-- thrown.
+throwProcessResult :: String -> String -> ExitCode -> IO (Chunk a)
+throwProcessResult _ _ ExitSuccess = return $ Result ExitSuccess
+throwProcessResult fun cmd (ExitFailure code) = processFailedException fun cmd [] code
+
+-- | Copied from "System.Process", the exception thrown when the
+-- process started by 'System.Process.readProcess' gets an
+-- 'ExitFailure'.
+processFailedException :: String -> String -> [String] -> Int -> IO a
+processFailedException fun cmd args exit_code =
+      ioError (mkIOError OtherError (fun ++ ": " ++ cmd ++
+                                     Prelude.concatMap ((' ':) . show) args ++
+                                     " (exit " ++ show exit_code ++ ")")
+                                 Nothing Nothing)
+
+-- | Turn the standard output of one process into the input of
+-- another, throwing an IO exception if the input process result code
+-- is ExitFailure.
+pipeProcessChunks :: (ListLikePlus a c) => CreateProcess -> [Chunk a] -> IO [Chunk a]
+pipeProcessChunks p input = collectProcessOutput' p input >>= readProcessChunks p
+
+-- | A version of collectProcessOutput which throws an exception of
+-- the exit code is ExitFailure.
+collectProcessOutput' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
+collectProcessOutput' p chunks =
+    withProcessResult (throwProcessResult "collectProcessOutput'" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectProcessOutput
+
+collectOutputAndError' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
+collectOutputAndError' p chunks =
+    withProcessResult (throwProcessResult "collectOutputAndError'" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectOutputAndError
+
+throwExitCode :: ListLike a c => CreateProcess -> [Chunk a] -> IO ()
+throwExitCode p chunks =
+    void $ throwProcessResult "throwExitCode" (showCmdSpecForUser (cmdspec p)) (collectExitCode chunks)
+
+-- | Apply the function to the chunk list and output the result,
+-- return the original (unmapped) chunk list.
+putMappedChunks :: ListLikePlus a c => ([Chunk a] -> [Chunk a]) -> [Chunk a] -> IO [Chunk a]
+putMappedChunks f chunks = mapM_ putChunk (f chunks) >> return chunks
+
+putIndentedShowCommand :: (ListLikePlus a c, Eq c, IsString a) =>
+                          CreateProcess -> String -> String -> [Chunk a] -> IO [Chunk a]
+putIndentedShowCommand p outp errp chunks =
+    putMappedChunks (insertCommandDisplay p . indentChunks outp errp) chunks
+
+-- | Output the indented text of a chunk list, but return the original
+-- unindented list.  Returns the original chunks.
+putIndented :: (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> IO [Chunk a]
+putIndented outp errp chunks = putMappedChunks (indentChunks outp errp) chunks
 
 -- | Output the dotified text of a chunk list, but return the original
 -- unindented list.
@@ -271,3 +316,6 @@ putDots charsPerDot dot chunks =
 
 putDotsLn :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
 putDotsLn cpd dot chunks = putDots cpd dot chunks >>= \ r -> hPutStr stderr "\n" >> return r
+
+displayCreateProcess :: CreateProcess -> String
+displayCreateProcess p = showCmdSpecForUser (cmdspec p) ++ maybe "" (\ d -> " (in " ++ d ++ ")") (cwd p)
