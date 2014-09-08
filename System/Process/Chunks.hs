@@ -10,6 +10,7 @@ module System.Process.Chunks
     -- * Chunk list operators
     , canonicalChunks
     , collectProcessTriple
+    , collectProcessOutput'
     , collectProcessOutput
     , withProcessResult
     , withProcessException
@@ -150,8 +151,13 @@ withProcessException f input =
 -- another, throwing an IO exception if the input process result code
 -- is ExitFailure.
 pipeProcessChunks :: (ListLikePlus a c) => CreateProcess -> [Chunk a] -> IO [Chunk a]
-pipeProcessChunks p input =
-    withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) input >>= readProcessChunks p . collectProcessOutput
+pipeProcessChunks p input = collectProcessOutput' p input >>= readProcessChunks p
+
+-- | A version of collectProcessOutput which throws an exception of
+-- the exit code is ExitFailure.
+collectProcessOutput' :: ListLike a c => CreateProcess -> [Chunk a] -> IO a
+collectProcessOutput' p chunks =
+    withProcessResult (throwProcessResult "pipeProcessChunks" (showCmdSpecForUser (cmdspec p))) chunks >>= return . collectProcessOutput
 
 -- | Based on the 'ExitCode', either return a Result Chunk or throw an
 -- IO error similar to what 'System.Process.readProcess' would have
