@@ -10,6 +10,9 @@ which take a CreateProcess record instead of a command name and argument list.  
 allows you to modify the CreateProcess before starting the process - for example, to
 set the working directory.
 
-Another (forthcoming) addition is readInterleaved, which reads and interleaves the
-chunks of output from several handles (e.g. stdout and stderr.)  This allows you to
-preserve the order in which a process produces output.
+Another addition is readInterleaved, which reads and interleaves the
+chunks of output from several handles (e.g. stdout and stderr.)  This
+allows you to preserve the order in which a process produces output.
+Derived from this is readProcessInterleaved (which wraps
+readInterleaved in code to manage a process) and readProcessChunks
+(which applies readProcessInterleaved to the Monoid Chunks.)

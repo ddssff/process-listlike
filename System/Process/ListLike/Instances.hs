@@ -1,7 +1,9 @@
 {-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies, TypeSynonymInstances #-}
--- | ListLikePlus instances for strict types - these are more
--- dangerous, if you start a long running process with them they will
--- block until the process finishes.  Why not try a lazy type?
+
+-- | ListLikePlus instances for strict and lazy types.  If you start a
+-- long running process with a strict type it will block until the
+-- process finishes.  Why not try a lazy type?
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module System.Process.ListLike.Instances where
 
