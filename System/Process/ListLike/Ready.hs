@@ -8,7 +8,6 @@
 --   maximum of 0.1 seconds.
 module System.Process.ListLike.Ready
     ( Process
-    , Output(Stdout, Stderr, Result)
     , Outputs
     , lazyRun
     , lazyCommand
@@ -24,23 +23,14 @@ import qualified GHC.IO.Exception as E
 import System.Process (ProcessHandle, waitForProcess, runInteractiveProcess, runInteractiveCommand)
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
-import System.Exit (ExitCode)
+import System.Process.ListLike.Class (Chunk(..))
 
 -- | This is the type returned by 'System.Process.runInteractiveProcess' et. al.
 type Process = (Handle, Handle, Handle, ProcessHandle)
 
--- | The lazyCommand, lazyProcess and lazyRun functions each return a
--- list of 'Output'.  There will generally be one Result value at or
--- near the end of the list (if the list has an end.)
-data Output
-    = Stdout B.ByteString
-    | Stderr B.ByteString
-    | Result ExitCode
-      deriving Show
-
 -- |An opaque type would give us additional type safety to ensure the
 -- semantics of 'exitCodeOnly'.
-type Outputs = [Output]
+type Outputs = [Chunk B.ByteString]
 
 bufSize = 65536		-- maximum chunk size
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
@@ -147,7 +137,7 @@ ready waitUSecs (input, inh, outh, errh, elems) =
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
-nextOut :: (Maybe Handle) -> Readyness -> (B.ByteString -> Output) -> IO (Outputs, Maybe Handle)
+nextOut :: (Maybe Handle) -> Readyness -> (B.ByteString -> Chunk B.ByteString) -> IO (Outputs, Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
 nextOut handle Unready _ = return ([], handle)	-- Handle is not ready
