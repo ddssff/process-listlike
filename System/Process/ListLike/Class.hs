@@ -15,6 +15,7 @@ module System.Process.ListLike.Class (
   readProcessChunks
   ) where
 
+import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent
 import Control.DeepSeq (NFData)
 import Control.Exception as E (SomeException, onException, catch, try, throwIO, mask, throw, AsyncException(UserInterrupt))
@@ -85,8 +86,7 @@ readInterleaved' :: forall a b c. (ListLikePlus a c, Monoid b) =>
                     b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> MVar (Either Handle b) -> IO b
 readInterleaved' start pairs intf finish res = do
   mapM_ (forkIO . uncurry readHandle) pairs
-  r <- takeChunks (length pairs)
-  return $ start <> r
+  mappend <$> pure start <*> takeChunks (length pairs)
     where
       -- Forked thread to read the input and send it to takeChunks via
       -- the MVar.
@@ -102,10 +102,10 @@ readInterleaved' start pairs intf finish res = do
         putMVar res (Left h)
       takeChunks :: Int -> IO b
       takeChunks 0 = finish
-      takeChunks openCount = takeChunk >>= takeChunks' openCount
-      takeChunks' :: Int -> Either Handle b -> IO b
-      takeChunks' openCount (Left h) = hClose h >> takeChunks (openCount - 1)
-      takeChunks' openCount (Right x) =
+      takeChunks openCount = takeChunk >>= takeMore openCount
+      takeMore :: Int -> Either Handle b -> IO b
+      takeMore openCount (Left h) = hClose h >> takeChunks (openCount - 1)
+      takeMore openCount (Right x) =
           do xs <- unsafeInterleaveIO $ takeChunks openCount
              return (x <> xs)
       takeChunk = takeMVar res `catch` (\ (e :: AsyncException) -> return $ Right $ intf (Left e))
