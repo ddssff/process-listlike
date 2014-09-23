@@ -8,7 +8,6 @@
 --   maximum of 0.1 seconds.
 module System.Process.ListLike.Ready
     ( Process
-    , Outputs
     , lazyRun
     , lazyCommand
     , lazyProcess
@@ -27,16 +26,12 @@ import System.Process.ListLike.Class (Chunk(..))
 -- | This is the type returned by 'System.Process.createProcess' et. al.
 type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 
--- |An opaque type would give us additional type safety to ensure the
--- semantics of 'exitCodeOnly'.
-type Outputs = [Chunk B.ByteString]
-
 bufSize = 65536		-- maximum chunk size
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Create a process with 'runInteractiveCommand' and run it with 'lazyRun'.
-lazyCommand :: String -> L.ByteString -> IO Outputs
+lazyCommand :: String -> L.ByteString -> IO [Chunk L.ByteString]
 lazyCommand cmd input =
     createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
@@ -46,21 +41,21 @@ lazyProcess :: FilePath
             -> Maybe FilePath
             -> Maybe [(String, String)]
             -> L.ByteString
-            -> IO Outputs
+            -> IO [Chunk L.ByteString]
 lazyProcess exec args cwd env input =
     createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
-lazyRun :: L.ByteString -> Process -> IO Outputs
+lazyRun :: L.ByteString -> Process -> IO [Chunk L.ByteString]
 lazyRun input (Just inh, Just outh, Just errh, pid) =
     hSetBinaryMode inh True >>
     hSetBinaryMode outh True >>
     hSetBinaryMode errh True >>
-    elements (L.toChunks input, Just inh, Just outh, Just errh, [])
+    elements (map (L.fromChunks . (: [])) (L.toChunks input), Just inh, Just outh, Just errh, [])
     where
-      elements :: ([B.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, Outputs) -> IO Outputs
+      elements :: ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString]) -> IO [Chunk L.ByteString]
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
@@ -98,8 +93,8 @@ hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) 
 -- are accepted.  If no input is accepted, or the input handle is
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
-ready :: Int -> ([B.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, Outputs)
-      -> IO ([B.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, Outputs)
+ready :: Int -> ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString])
+      -> IO ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString])
 ready waitUSecs (input, inh, outh, errh, elems) =
     do
       outReady <- maybe (return Unready) hReady' outh
@@ -118,11 +113,11 @@ ready waitUSecs (input, inh, outh, errh, elems) =
         -- Input is available and there are no ready output handles
         (input : etc, Just handle, Unready, Unready)
             -- Discard a zero byte input
-            | input == B.empty -> ready waitUSecs (etc, inh, outh, errh, elems)
+            | input == L.empty -> ready waitUSecs (etc, inh, outh, errh, elems)
             -- Send some input to the process
             | True ->
-                do input' <- B.hPutNonBlocking handle input
-                   case B.null input' of
+                do input' <- L.hPutNonBlocking handle input
+                   case L.null input' of
                      -- Input buffer is full too, sleep.
                      True -> do threadDelay uSecs
                                 ready (min maxUSecs (2 * waitUSecs)) (input : etc, inh, outh, errh, elems)
@@ -136,14 +131,14 @@ ready waitUSecs (input, inh, outh, errh, elems) =
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
-nextOut :: (Maybe Handle) -> Readyness -> (B.ByteString -> Chunk B.ByteString) -> IO (Outputs, Maybe Handle)
+nextOut :: (Maybe Handle) -> Readyness -> (L.ByteString -> Chunk L.ByteString) -> IO ([Chunk L.ByteString], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
 nextOut handle Unready _ = return ([], handle)	-- Handle is not ready
 nextOut (Just handle) Ready constructor =	-- Perform a read 
     do
-      a <- B.hGetNonBlocking handle bufSize
-      case B.length a of
+      a <- L.hGetNonBlocking handle bufSize
+      case L.length a of
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
         0 -> do hClose handle
