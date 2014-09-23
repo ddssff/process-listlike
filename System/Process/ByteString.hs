@@ -14,6 +14,7 @@ module System.Process.ByteString
     , module System.Process.ListLike.Chunks
     ) where
 
+import Control.Exception (AsyncException)
 import Data.ByteString.Char8 (ByteString)
 import Data.Monoid (Monoid)
 import System.Exit (ExitCode)
@@ -35,9 +36,9 @@ readCreateProcess :: (a ~ ByteString) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ ByteString) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
-readProcessInterleaved :: (a ~ ByteString, Monoid b) => (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> CreateProcess -> a -> IO b
+readProcessInterleaved :: (a ~ ByteString, Monoid b) => (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> CreateProcess -> a -> IO b
 readProcessInterleaved = R.readProcessInterleaved
-readInterleaved :: (a ~ ByteString, Monoid b) => b -> [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved :: (a ~ ByteString, Monoid b) => b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> IO b
 readInterleaved = R.readInterleaved
 readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [R.Chunk a]
 readProcessChunks = R.readProcessChunks

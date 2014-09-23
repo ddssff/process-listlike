@@ -17,7 +17,7 @@ module System.Process.ListLike.Class (
 
 import Control.Concurrent
 import Control.DeepSeq (NFData)
-import Control.Exception as E (SomeException, onException, catch, try, throwIO, mask, throw)
+import Control.Exception as E (SomeException, onException, catch, try, throwIO, mask, throw, AsyncException(UserInterrupt))
 import Control.Monad
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
@@ -58,9 +58,9 @@ class ListLikeIO a c => ListLikePlus a c where
 -- convert it into a Monoid, preserving the order of appearance of the
 -- different chunks of output from standard output and standard error.
 readProcessInterleaved :: (ListLikePlus a c, Monoid b) =>
-                          (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b)
+                          (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b)
                        -> CreateProcess -> a -> IO b
-readProcessInterleaved pidf codef outf errf p input = mask $ \ restore -> do
+readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> do
   hs@(Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
@@ -69,7 +69,7 @@ readProcessInterleaved pidf codef outf errf p input = mask $ \ restore -> do
   flip onException
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ readInterleaved (pidf pid) [(outf, outh), (errf, errh)] $ waitForProcess pid >>= return . codef
+    waitOut <- forkWait $ readInterleaved (pidf pid) [(outf, outh), (errf, errh)] intf $ waitForProcess pid >>= return . codef
     writeInput inh input
     waitOut
 
@@ -78,12 +78,12 @@ readProcessInterleaved pidf codef outf errf p input = mask $ \ restore -> do
 -- they appear.  This closes each handle on EOF, because AFAIK it is
 -- the only useful thing to do with a file handle that has reached
 -- EOF.
-readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) => b -> [(a -> b, Handle)] -> IO b -> IO b
-readInterleaved start pairs finish = newEmptyMVar >>= readInterleaved' start pairs finish
+readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) => b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> IO b
+readInterleaved start pairs intf finish = newEmptyMVar >>= readInterleaved' start pairs intf finish
 
 readInterleaved' :: forall a b c. (ListLikePlus a c, Monoid b) =>
-                    b -> [(a -> b, Handle)] -> IO b -> MVar (Either Handle b) -> IO b
-readInterleaved' start pairs finish res = do
+                    b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> MVar (Either Handle b) -> IO b
+readInterleaved' start pairs intf finish res = do
   mapM_ (forkIO . uncurry readHandle) pairs
   r <- takeChunks (length pairs)
   return $ start <> r
@@ -102,12 +102,13 @@ readInterleaved' start pairs finish res = do
         putMVar res (Left h)
       takeChunks :: Int -> IO b
       takeChunks 0 = finish
-      takeChunks openCount = takeMVar res >>= takeChunk openCount
-      takeChunk :: Int -> Either Handle b -> IO b
-      takeChunk openCount (Left h) = hClose h >> takeChunks (openCount - 1)
-      takeChunk openCount (Right x) =
+      takeChunks openCount = takeChunk >>= takeChunks' openCount
+      takeChunks' :: Int -> Either Handle b -> IO b
+      takeChunks' openCount (Left h) = hClose h >> takeChunks (openCount - 1)
+      takeChunks' openCount (Right x) =
           do xs <- unsafeInterleaveIO $ takeChunks openCount
              return (x <> xs)
+      takeChunk = takeMVar res `catch` (\ (e :: AsyncException) -> return $ Right $ intf (Left e))
 
 -- | An implementation of 'System.Process.readProcessWithExitCode'
 -- with a two generalizations: (1) The input and outputs can be any
@@ -126,6 +127,7 @@ readCreateProcessWithExitCode p input =
                            (\ c -> (c, mempty, mempty))
                            (\ x -> (mempty, x, mempty))
                            (\ x -> (mempty, mempty, x))
+                           (\ _ -> (mempty, mempty, mempty))
                            p input
 
 -- | A version of 'System.Process.readProcessWithExitCode' that uses
@@ -177,7 +179,7 @@ readCreateProcess p input = mask $ \restore -> do
   flip onException
     (do hClose inh; hClose outh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ readInterleaved mempty [(id, outh)] $ waitForProcess pid >>= codef
+    waitOut <- forkWait $ readInterleaved mempty [(id, outh)] (const mempty) $ waitForProcess pid >>= codef
     writeInput inh input
     waitOut
 
@@ -191,7 +193,7 @@ data Chunk a
     = ProcessHandle ProcessHandle -- ^ This will always come first
     | Stdout a
     | Stderr a
-    | Exception IOError
+    | Exception (Either AsyncException IOError)
     | Result ExitCode
     deriving Show
 
@@ -200,7 +202,7 @@ data Chunk a
 -- (unimplemented), and finally an exit code.
 readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
 readProcessChunks p input =
-    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) p input
+    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) (\ x -> [Exception x]) p input
 
 -- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
 -- of data returned by 'readProcessChunks'.

@@ -1,3 +1,10 @@
+haskell-process-listlike (1.1) unstable; urgency=low
+
+  * Extend the exception type that Chunk can carry from IOError
+    to Either AsyncException IOError.
+
+ -- David Fox <dsf@seereason.com>  Tue, 23 Sep 2014 10:10:14 -0700
+
 haskell-process-listlike (1.0) unstable; urgency=low
 
   * Merge the two instance modules into System.Process.ListLike.Instances,

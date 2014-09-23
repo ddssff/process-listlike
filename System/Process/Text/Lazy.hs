@@ -15,6 +15,7 @@ module System.Process.Text.Lazy
     , module System.Process.ListLike.Chunks
     ) where
 
+import Control.Exception (AsyncException)
 import Data.Text.Lazy (Text)
 import Data.Monoid (Monoid)
 import System.Exit (ExitCode)
@@ -36,9 +37,9 @@ readCreateProcess :: (a ~ Text) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ Text) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
-readProcessInterleaved :: (a ~ Text, Monoid b) => (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> CreateProcess -> a -> IO b
+readProcessInterleaved :: (a ~ Text, Monoid b) => (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> CreateProcess -> a -> IO b
 readProcessInterleaved = R.readProcessInterleaved
-readInterleaved :: (a ~ Text, Monoid b) => b -> [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved :: (a ~ Text, Monoid b) => b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> IO b
 readInterleaved = R.readInterleaved
 readProcessChunks :: (a ~ Text) => CreateProcess -> a -> IO [R.Chunk a]
 readProcessChunks = R.readProcessChunks
