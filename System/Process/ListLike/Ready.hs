@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports, ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses, PackageImports, ScopedTypeVariables #-}
 {-# OPTIONS -Wwarn -Wall -fno-warn-name-shadowing -fno-warn-missing-signatures #-}
 -- | Function to run a process and return a lazy list of chunks from
 --   standard output, standard error, and at the end of the list an
@@ -11,17 +11,38 @@ module System.Process.ListLike.Ready
     , lazyRun
     , lazyCommand
     , lazyProcess
+    , test1
     ) where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
+import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
 import qualified GHC.IO.Exception as E
+import Prelude hiding (length, null)
 import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe))
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process.ListLike.Class (Chunk(..))
+
+-- For the ListLikeIOPlus instance
+import qualified Data.ByteString.Lazy as L
+import Data.Word (Word8)
+
+-- For the test
+import System.IO (hPutStrLn, stderr)
+
+test1 = lazyCommand "yes | cat -n | while read i; do echo $i; sleep 1; done" L.empty  >>= mapM_ (hPutStrLn stderr . show)
+
+class ListLikeIO a c => ListLikeIOPlus a c where
+    hPutNonBlocking :: Handle -> a -> IO a
+    chunks :: a -> [a]
+
+instance ListLikeIOPlus L.ByteString Word8 where
+    hPutNonBlocking = L.hPutNonBlocking
+    -- Yes, This is ugly.  The question is, do we need to feed the
+    -- input to the process in chunks or can we fork an input thread
+    -- to do the feeding?  Probably...
+    chunks = map (L.fromChunks . (: [])) . L.toChunks
 
 -- | This is the type returned by 'System.Process.createProcess' et. al.
 type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
@@ -31,31 +52,32 @@ uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Create a process with 'runInteractiveCommand' and run it with 'lazyRun'.
-lazyCommand :: String -> L.ByteString -> IO [Chunk L.ByteString]
+lazyCommand :: ListLikeIOPlus a c => String -> a -> IO [Chunk a]
 lazyCommand cmd input =
     createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
 -- | Create a process with 'runInteractiveProcess' and run it with 'lazyRun'.
-lazyProcess :: FilePath
+lazyProcess :: ListLikeIOPlus a c =>
+               FilePath
             -> [String]
             -> Maybe FilePath
             -> Maybe [(String, String)]
-            -> L.ByteString
-            -> IO [Chunk L.ByteString]
+            -> a
+            -> IO [Chunk a]
 lazyProcess exec args cwd env input =
     createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
-lazyRun :: L.ByteString -> Process -> IO [Chunk L.ByteString]
+lazyRun :: ListLikeIOPlus a c => a -> Process -> IO [Chunk a]
 lazyRun input (Just inh, Just outh, Just errh, pid) =
     hSetBinaryMode inh True >>
     hSetBinaryMode outh True >>
     hSetBinaryMode errh True >>
-    elements (map (L.fromChunks . (: [])) (L.toChunks input), Just inh, Just outh, Just errh, [])
+    elements (chunks input, Just inh, Just outh, Just errh, [])
     where
-      elements :: ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString]) -> IO [Chunk L.ByteString]
+      elements :: ListLikeIOPlus a c => ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a]) -> IO [Chunk a]
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
@@ -93,8 +115,9 @@ hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) 
 -- are accepted.  If no input is accepted, or the input handle is
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
-ready :: Int -> ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString])
-      -> IO ([L.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk L.ByteString])
+ready :: ListLikeIOPlus a c =>
+         Int -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a])
+      -> IO ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a])
 ready waitUSecs (input, inh, outh, errh, elems) =
     do
       outReady <- maybe (return Unready) hReady' outh
@@ -113,11 +136,11 @@ ready waitUSecs (input, inh, outh, errh, elems) =
         -- Input is available and there are no ready output handles
         (input : etc, Just handle, Unready, Unready)
             -- Discard a zero byte input
-            | input == L.empty -> ready waitUSecs (etc, inh, outh, errh, elems)
+            | null input -> ready waitUSecs (etc, inh, outh, errh, elems)
             -- Send some input to the process
             | True ->
-                do input' <- L.hPutNonBlocking handle input
-                   case L.null input' of
+                do input' <- hPutNonBlocking handle input
+                   case null input' of
                      -- Input buffer is full too, sleep.
                      True -> do threadDelay uSecs
                                 ready (min maxUSecs (2 * waitUSecs)) (input : etc, inh, outh, errh, elems)
@@ -131,14 +154,14 @@ ready waitUSecs (input, inh, outh, errh, elems) =
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
-nextOut :: (Maybe Handle) -> Readyness -> (L.ByteString -> Chunk L.ByteString) -> IO ([Chunk L.ByteString], Maybe Handle)
+nextOut :: ListLikeIO a c => (Maybe Handle) -> Readyness -> (a -> Chunk a) -> IO ([Chunk a], Maybe Handle)
 nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
 nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
 nextOut handle Unready _ = return ([], handle)	-- Handle is not ready
 nextOut (Just handle) Ready constructor =	-- Perform a read 
     do
-      a <- L.hGetNonBlocking handle bufSize
-      case L.length a of
+      a <- hGetNonBlocking handle bufSize
+      case length a of
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
         0 -> do hClose handle
