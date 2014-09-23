@@ -70,7 +70,10 @@ readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> d
   flip onException
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ readInterleaved (pidf pid) [(outf, outh), (errf, errh)] intf $ waitForProcess pid >>= return . codef
+    waitOut <- forkWait $ do start <- pure (pidf pid)
+                             output <- readInterleaved [(outf, outh), (errf, errh)] intf
+                             result <- codef <$> waitForProcess pid
+                             return $ start <> output <> result
     writeInput inh input
     waitOut
 
@@ -79,14 +82,15 @@ readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> d
 -- they appear.  This closes each handle on EOF, because AFAIK it is
 -- the only useful thing to do with a file handle that has reached
 -- EOF.
-readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) => b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> IO b
-readInterleaved start pairs intf finish = newEmptyMVar >>= readInterleaved' start pairs intf finish
+readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) =>
+                   [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b
+readInterleaved pairs intf = newEmptyMVar >>= readInterleaved' pairs intf
 
 readInterleaved' :: forall a b c. (ListLikePlus a c, Monoid b) =>
-                    b -> [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b -> MVar (Either Handle b) -> IO b
-readInterleaved' start pairs intf finish res = do
+                    [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs intf res = do
   mapM_ (forkIO . uncurry readHandle) pairs
-  mappend <$> pure start <*> takeChunks (length pairs)
+  takeChunks (length pairs)
     where
       -- Forked thread to read the input and send it to takeChunks via
       -- the MVar.
@@ -101,7 +105,7 @@ readInterleaved' start pairs intf finish res = do
         hClose h
         putMVar res (Left h)
       takeChunks :: Int -> IO b
-      takeChunks 0 = finish
+      takeChunks 0 = return mempty
       takeChunks openCount = takeChunk >>= takeMore openCount
       takeMore :: Int -> Either Handle b -> IO b
       takeMore openCount (Left h) = hClose h >> takeChunks (openCount - 1)
@@ -179,7 +183,8 @@ readCreateProcess p input = mask $ \restore -> do
   flip onException
     (do hClose inh; hClose outh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ readInterleaved mempty [(id, outh)] (const mempty) $ waitForProcess pid >>= codef
+    waitOut <- forkWait $ (mappend <$> (readInterleaved [(id, outh)] (const mempty))
+                                   <*> (waitForProcess pid >>= codef))
     writeInput inh input
     waitOut
 
