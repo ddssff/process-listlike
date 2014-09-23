@@ -19,13 +19,13 @@ import Control.Exception
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified GHC.IO.Exception as E
-import System.Process (ProcessHandle, waitForProcess, runInteractiveProcess, runInteractiveCommand)
+import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe))
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process.ListLike.Class (Chunk(..))
 
--- | This is the type returned by 'System.Process.runInteractiveProcess' et. al.
-type Process = (Handle, Handle, Handle, ProcessHandle)
+-- | This is the type returned by 'System.Process.createProcess' et. al.
+type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
 
 -- |An opaque type would give us additional type safety to ensure the
 -- semantics of 'exitCodeOnly'.
@@ -37,7 +37,8 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Create a process with 'runInteractiveCommand' and run it with 'lazyRun'.
 lazyCommand :: String -> L.ByteString -> IO Outputs
-lazyCommand cmd input = runInteractiveCommand cmd >>= lazyRun input
+lazyCommand cmd input =
+    createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
 -- | Create a process with 'runInteractiveProcess' and run it with 'lazyRun'.
 lazyProcess :: FilePath
@@ -47,13 +48,13 @@ lazyProcess :: FilePath
             -> L.ByteString
             -> IO Outputs
 lazyProcess exec args cwd env input =
-    runInteractiveProcess exec args cwd env >>= lazyRun input
+    createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
 lazyRun :: L.ByteString -> Process -> IO Outputs
-lazyRun input (inh, outh, errh, pid) =
+lazyRun input (Just inh, Just outh, Just errh, pid) =
     hSetBinaryMode inh True >>
     hSetBinaryMode outh True >>
     hSetBinaryMode errh True >>
