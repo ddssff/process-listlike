@@ -15,7 +15,6 @@ module System.Process.ListLike.Ready
     ) where
 
 import Control.Concurrent (threadDelay)
-import "mtl" Control.Monad.Trans (MonadIO(liftIO))
 import Control.Exception
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -37,29 +36,28 @@ uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Create a process with 'runInteractiveCommand' and run it with 'lazyRun'.
-lazyCommand :: MonadIO m => String -> L.ByteString -> m Outputs
-lazyCommand cmd input = liftIO (runInteractiveCommand cmd) >>= lazyRun input
+lazyCommand :: String -> L.ByteString -> IO Outputs
+lazyCommand cmd input = runInteractiveCommand cmd >>= lazyRun input
 
 -- | Create a process with 'runInteractiveProcess' and run it with 'lazyRun'.
-lazyProcess :: MonadIO m =>
-               FilePath
+lazyProcess :: FilePath
             -> [String]
             -> Maybe FilePath
             -> Maybe [(String, String)]
             -> L.ByteString
-            -> m Outputs
+            -> IO Outputs
 lazyProcess exec args cwd env input =
-    liftIO (runInteractiveProcess exec args cwd env) >>= lazyRun input
+    runInteractiveProcess exec args cwd env >>= lazyRun input
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
-lazyRun :: MonadIO m => L.ByteString -> Process -> m Outputs
+lazyRun :: L.ByteString -> Process -> IO Outputs
 lazyRun input (inh, outh, errh, pid) =
-    liftIO (hSetBinaryMode inh True >>
-            hSetBinaryMode outh True >>
-            hSetBinaryMode errh True >>
-            elements (L.toChunks input, Just inh, Just outh, Just errh, []))
+    hSetBinaryMode inh True >>
+    hSetBinaryMode outh True >>
+    hSetBinaryMode errh True >>
+    elements (L.toChunks input, Just inh, Just outh, Just errh, [])
     where
       elements :: ([B.ByteString], Maybe Handle, Maybe Handle, Maybe Handle, Outputs) -> IO Outputs
       -- EOF on both output descriptors, get exit code.  It can be
