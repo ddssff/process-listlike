@@ -6,16 +6,27 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.ListLike as ListLike (ListLike(..))
 import Data.Maybe (mapMaybe)
-import Data.Monoid (Monoid(..))
+import Data.Monoid (Monoid(..), (<>))
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
-import Prelude hiding (length, concat)
+import Prelude hiding (length, concat, null)
 import GHC.IO.Exception
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
 import System.Process (proc)
-import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..), Chunk(..), readProcessChunks, canonicalChunks)
+import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..), Chunk(..), readProcessChunks)
 import Test.HUnit hiding (path)
+
+-- | Merge adjacent and eliminate empty Stdout or Stderr chunks.  This
+-- may not be a good idea if we are looking to get our output as soon
+-- as it becomes available.
+canonicalChunks :: ListLikePlus a c => [Chunk a] -> [Chunk a]
+canonicalChunks [] = []
+canonicalChunks (Stdout a : Stdout b : more) = canonicalChunks (Stdout (a <> b) : more)
+canonicalChunks (Stderr a : Stderr b : more) = canonicalChunks (Stderr (a <> b) : more)
+canonicalChunks (Stdout a : more) | null a = canonicalChunks more
+canonicalChunks (Stderr a : more) | null a = canonicalChunks more
+canonicalChunks (a : more) = a : canonicalChunks more
 
 fromString :: String -> B.ByteString
 fromString = fromList . encode

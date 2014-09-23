@@ -8,7 +8,7 @@ module System.Process.ListLike.Chunks
     , foldChunk
     , foldChunks
     -- * Pure Chunk List Combinators
-    , canonicalChunks
+    , canonicalChunks'
     , indentChunks
     , dotifyChunks
     , insertCommandStart
@@ -72,7 +72,10 @@ foldChunk _ _ _ _ exitf (Result x) = exitf x
 foldChunks :: (r -> Chunk a -> r) -> r -> [Chunk a] -> r
 foldChunks f r0 xs = foldl' f r0 xs
 
--- | Merge adjacent and eliminate empty Stdout or Stderr chunks.
+{-
+-- | Merge adjacent and eliminate empty Stdout or Stderr chunks.  This
+-- may not be a good idea if we are looking to get our output as soon
+-- as it becomes available.
 canonicalChunks :: ListLikePlus a c => [Chunk a] -> [Chunk a]
 canonicalChunks [] = []
 canonicalChunks (Stdout a : Stdout b : more) = canonicalChunks (Stdout (a <> b) : more)
@@ -80,6 +83,14 @@ canonicalChunks (Stderr a : Stderr b : more) = canonicalChunks (Stderr (a <> b) 
 canonicalChunks (Stdout a : more) | null a = canonicalChunks more
 canonicalChunks (Stderr a : more) | null a = canonicalChunks more
 canonicalChunks (a : more) = a : canonicalChunks more
+-}
+
+-- | Eliminate empty Stdout or Stderr chunks.
+canonicalChunks' :: ListLikePlus a c => [Chunk a] -> [Chunk a]
+canonicalChunks' [] = []
+canonicalChunks' (Stdout a : more) | null a = canonicalChunks' more
+canonicalChunks' (Stderr a : more) | null a = canonicalChunks' more
+canonicalChunks' (a : more) = a : canonicalChunks' more
 
 -- | Pure function to indent the text of a chunk list.
 indentChunks :: forall a c. (ListLikePlus a c, Eq c, IsString a) => String -> String -> [Chunk a] -> [Chunk a]
