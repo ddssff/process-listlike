@@ -7,18 +7,22 @@
 --   with the sleep intervals increasing from 8 microseconds to a
 --   maximum of 0.1 seconds.
 module System.Process.ListLike.Ready
-    ( Process
-    , lazyRun
+    ( readCreateProcessWithExitCode
+    , readProcessInterleaved
+    , Process
+    , readProcessChunks
     , lazyCommand
     , lazyProcess
-    , test1
     ) where
 
+import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
+import Data.Monoid (Monoid, mempty, mconcat, (<>))
 import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
+import System.Exit (ExitCode)
 import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe))
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
@@ -32,6 +36,8 @@ import Data.Word (Word8)
 import System.IO (hPutStrLn, stderr)
 
 test1 = lazyCommand "yes | cat -n | while read i; do echo $i; sleep 1; done" L.empty  >>= mapM_ (hPutStrLn stderr . show)
+test2 = lazyCommand "ls -l /tmp" L.empty  >>= mapM_ (hPutStrLn stderr . show)
+test3 = lazyCommand "oneko" L.empty  >>= mapM_ (hPutStrLn stderr . show)
 
 class ListLikeIO a c => ListLikeIOPlus a c where
     hPutNonBlocking :: Handle -> a -> IO a
@@ -51,12 +57,12 @@ bufSize = 65536		-- maximum chunk size
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
--- | Create a process with 'runInteractiveCommand' and run it with 'lazyRun'.
+-- | Create a process with 'runInteractiveCommand' and run it with 'readProcessChunks'.
 lazyCommand :: ListLikeIOPlus a c => String -> a -> IO [Chunk a]
 lazyCommand cmd input =
-    createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
+    createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
 
--- | Create a process with 'runInteractiveProcess' and run it with 'lazyRun'.
+-- | Create a process with 'runInteractiveProcess' and run it with 'readProcessChunks'.
 lazyProcess :: ListLikeIOPlus a c =>
                FilePath
             -> [String]
@@ -65,17 +71,50 @@ lazyProcess :: ListLikeIOPlus a c =>
             -> a
             -> IO [Chunk a]
 lazyProcess exec args cwd env input =
-    createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= lazyRun input
+    createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
+
+readCreateProcessWithExitCode
+    :: forall a c.
+       ListLikeIOPlus a c =>
+       CreateProcess   -- ^ process to run
+    -> a               -- ^ standard input
+    -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
+readCreateProcessWithExitCode p input =
+    readProcessInterleaved (\ _ -> mempty)
+                           (\ c -> (c, mempty, mempty))
+                           (\ x -> (mempty, x, mempty))
+                           (\ x -> (mempty, mempty, x))
+                           (\ _ -> (mempty, mempty, mempty))
+                           p input
+
+readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, Monoid b) =>
+                          (ProcessHandle -> b)
+                       -> (ExitCode -> b)
+                       -> (a -> b)
+                       -> (a -> b)
+                       -> (Either AsyncException IOError -> b)
+                       -> CreateProcess -> a -> IO b
+readProcessInterleaved pidf codef outf errf intf p input =
+    createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>=
+    readProcessChunks input >>=
+    return . mconcat . map doChunk
+    where
+      doChunk (ProcessHandle x) = pidf x
+      doChunk (Stdout x) = outf x
+      doChunk (Stderr x) = errf x
+      doChunk (Exception x) = intf x
+      doChunk (Result x) = codef x
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
-lazyRun :: ListLikeIOPlus a c => a -> Process -> IO [Chunk a]
-lazyRun input (Just inh, Just outh, Just errh, pid) =
-    hSetBinaryMode inh True >>
-    hSetBinaryMode outh True >>
-    hSetBinaryMode errh True >>
-    elements (chunks input, Just inh, Just outh, Just errh, [])
+readProcessChunks :: ListLikeIOPlus a c => a -> Process -> IO [Chunk a]
+readProcessChunks input (mb_inh, mb_outh, mb_errh, pid) =
+    (<>) <$> pure [ProcessHandle pid]
+         <*> do maybe (return ()) (`hSetBinaryMode` True) mb_inh
+                maybe (return ()) (`hSetBinaryMode` True) mb_outh
+                maybe (return ()) (`hSetBinaryMode` True) mb_errh
+                elements (chunks input, mb_inh, mb_outh, mb_errh, [])
     where
       elements :: ListLikeIOPlus a c => ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a]) -> IO [Chunk a]
       -- EOF on both output descriptors, get exit code.  It can be
