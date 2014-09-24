@@ -89,6 +89,18 @@ chmod path =
     getFileStatus "Tests/Test1.hs" >>= \ status ->
     setFileMode path (foldr unionFileModes (fileMode status) [ownerExecuteMode, groupExecuteMode, otherExecuteMode])
 
+cps :: [CreateProcess]
+cps = [ proc "true" []
+      , proc "false" []
+      , shell "foo"
+      , proc "foo" []
+      , shell "yes | cat -n | head 100"
+      , shell "yes | cat -n"
+      , proc "cat" ["Tests/text"]
+      , proc "cat" ["Tests/houseisclean.jpg"]
+      , proc "Tests/Test1.hs" []
+      ]
+
 test1 :: Test
 test1 =
     TestLabel "test1"
