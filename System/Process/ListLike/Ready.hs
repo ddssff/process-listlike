@@ -26,7 +26,8 @@ import System.Exit (ExitCode)
 import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe))
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
-import System.Process.ListLike.Class (Chunk(..))
+import System.Process.ListLike.Class (Chunk(..), ProcessOutput(..), ListLikePlus(..))
+import System.Process.ListLike.Instances ()
 
 -- For the ListLikeIOPlus instance
 import qualified Data.ByteString.Lazy as L
@@ -39,7 +40,7 @@ test1 = lazyCommand "yes | cat -n | while read i; do echo $i; sleep 1; done" L.e
 test2 = lazyCommand "ls -l /tmp" L.empty  >>= mapM_ (hPutStrLn stderr . show)
 test3 = lazyCommand "oneko" L.empty  >>= mapM_ (hPutStrLn stderr . show)
 
-class ListLikeIO a c => ListLikeIOPlus a c where
+class ListLikePlus a c => ListLikeIOPlus a c where
     hPutNonBlocking :: Handle -> a -> IO a
     chunks :: a -> [a]
 
@@ -75,26 +76,16 @@ lazyProcess exec args cwd env input =
 
 readCreateProcessWithExitCode
     :: forall a c.
-       ListLikeIOPlus a c =>
+       (ListLikeIOPlus a c) =>
        CreateProcess   -- ^ process to run
     -> a               -- ^ standard input
     -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
 readCreateProcessWithExitCode p input =
-    readProcessInterleaved (\ _ -> mempty)
-                           (\ c -> (c, mempty, mempty))
-                           (\ x -> (mempty, x, mempty))
-                           (\ x -> (mempty, mempty, x))
-                           (\ _ -> (mempty, mempty, mempty))
-                           p input
+    readProcessInterleaved p input
 
-readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, Monoid b) =>
-                          (ProcessHandle -> b)
-                       -> (ExitCode -> b)
-                       -> (a -> b)
-                       -> (a -> b)
-                       -> (Either AsyncException IOError -> b)
-                       -> CreateProcess -> a -> IO b
-readProcessInterleaved pidf codef outf errf intf p input =
+readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) =>
+                          CreateProcess -> a -> IO b
+readProcessInterleaved p input =
     createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>=
     readProcessChunks input >>=
     return . mconcat . map doChunk
