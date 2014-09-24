@@ -342,8 +342,8 @@ putDots :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
 putDots charsPerDot dot chunks =
     evalStateT (mapM (\ x -> dotifyChunk charsPerDot dot x >>= mapM_ (lift . putChunk) >> return x) chunks) 0
 
-putDotsLn :: (ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
-putDotsLn cpd dot chunks = putDots cpd dot chunks >>= \ r -> hPutStr stderr "\n" >> return r
+putDotsLn :: forall a c. (IsString a, ListLikePlus a c) => Int -> c -> [Chunk a] -> IO [Chunk a]
+putDotsLn cpd dot chunks = putDots cpd dot chunks >>= \ r -> hPutStr stderr (fromString "\n" :: a) >> return r
 
 displayCreateProcess :: CreateProcess -> String
 displayCreateProcess p = showCmdSpecForUser (cmdspec p) ++ maybe "" (\ d -> " (in " ++ d ++ ")") (cwd p)
