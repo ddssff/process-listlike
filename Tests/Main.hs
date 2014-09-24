@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, OverloadedStrings, RankNTypes #-}
+{-# LANGUAGE FlexibleInstances, OverloadedStrings, RankNTypes, ScopedTypeVariables #-}
 module Main where
 
 import Codec.Binary.UTF8.String (encode)
@@ -13,7 +13,7 @@ import Prelude hiding (length, concat, null)
 import GHC.IO.Exception
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
-import System.Process (proc)
+import System.Process (proc, shell)
 import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..), Chunk(..), readProcessChunks)
 import Test.HUnit hiding (path)
 
@@ -220,4 +220,13 @@ being printed.  You can see the open quote.
        , TestLabel "file closed 4" $
          TestCase (do result <- readCreateProcessWithExitCode (proc "Tests/Test4.hs" []) ("abcde" :: LT.Text)
                       assertEqual "file closed 4" (ExitSuccess, "a", "Read one character: 'a'\n") result)
+       , TestLabel "exit code 0" $
+         TestCase (do result <- readCreateProcess (shell "echo \"hello, world\"") ("" :: LT.Text)
+                      assertEqual "exit code 1" "\"hello, world\\n\"" (show result)
+                  )
+       -- I'd like to test readCreateProcess but I can't seem to catch the exception it throws
+       , TestLabel "exit code 1" $
+         TestCase (do result <- readCreateProcessWithExitCode (proc "bash" ["-e", "exit", "1"]) ("" :: LT.Text)
+                      assertEqual "exit code 1" "(ExitFailure 1,\"\",\"bash: exit: No such file or directory\\n\")" (show result)
+                  )
        ])

@@ -14,11 +14,9 @@ module System.Process.String
     , module System.Process.ListLike.Chunks
     ) where
 
-import Control.Exception (AsyncException)
-import Data.Monoid (Monoid)
 import System.Exit (ExitCode)
 import System.IO (Handle)
-import System.Process (CreateProcess, ProcessHandle)
+import System.Process (CreateProcess)
 import System.Process.ListLike.Chunks hiding (readProcessChunks)
 import System.Process.ListLike.Class hiding
     (readProcess, readProcessWithExitCode,
@@ -35,9 +33,9 @@ readCreateProcess :: (a ~ String) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode :: (a ~ String) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
-readProcessInterleaved :: (a ~ String, Monoid b) => (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> CreateProcess -> a -> IO b
+readProcessInterleaved :: (a ~ String, ProcessOutput a b) => CreateProcess -> a -> IO b
 readProcessInterleaved = R.readProcessInterleaved
-readInterleaved :: (a ~ String, Monoid b) => [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b
+readInterleaved :: (a ~ String, ProcessOutput a b) => [(a -> b, Handle)] -> IO b
 readInterleaved = R.readInterleaved
 readProcessChunks :: (a ~ String) => CreateProcess -> a -> IO [R.Chunk a]
 readProcessChunks = R.readProcessChunks

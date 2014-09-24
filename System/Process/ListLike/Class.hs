@@ -1,9 +1,10 @@
 -- | Generalized versions of the functions
 -- 'System.Process.readProcess', and
 -- 'System.Process.readProcessWithExitCode'.
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, FunctionalDependencies, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies, UndecidableInstances #-}
 module System.Process.ListLike.Class (
   ListLikePlus(..),
+  ProcessOutput(..),
   readProcessInterleaved,
   readInterleaved,
   readCreateProcessWithExitCode,
@@ -34,6 +35,14 @@ import System.Process (ProcessHandle, CreateProcess(..), StdStream(CreatePipe, I
                        CmdSpec(RawCommand, ShellCommand), showCommandForUser,
                        createProcess, waitForProcess, terminateProcess)
 
+-- | Methods for turning the output of a process into a monoid.
+class Monoid b => ProcessOutput a b | b -> a where
+    pidf :: ProcessHandle -> b
+    outf :: a -> b
+    errf :: a -> b
+    intf :: Either AsyncException IOError -> b
+    codef :: ExitCode -> b
+
 -- | A process should have one 'ExitCode' at the end, this monoid lets
 -- us build a monoid for the type returned by readProcessWithExitCode.
 instance Monoid ExitCode where
@@ -58,10 +67,8 @@ class ListLikeIO a c => ListLikePlus a c where
 -- | Read the output of a process and use the argument functions to
 -- convert it into a Monoid, preserving the order of appearance of the
 -- different chunks of output from standard output and standard error.
-readProcessInterleaved :: (ListLikePlus a c, Monoid b) =>
-                          (ProcessHandle -> b) -> (ExitCode -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b)
-                       -> CreateProcess -> a -> IO b
-readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> do
+readProcessInterleaved :: (ListLikePlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
+readProcessInterleaved  p input = mask $ \ restore -> do
   hs@(Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
@@ -71,7 +78,7 @@ readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> d
     (do hClose inh; hClose outh; hClose errh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
     waitOut <- forkWait $ do start <- pure (pidf pid)
-                             output <- readInterleaved [(outf, outh), (errf, errh)] intf
+                             output <- readInterleaved [(outf, outh), (errf, errh)]
                              result <- codef <$> waitForProcess pid
                              return $ start <> output <> result
     writeInput inh input
@@ -82,13 +89,13 @@ readProcessInterleaved pidf codef outf errf intf p input = mask $ \ restore -> d
 -- they appear.  This closes each handle on EOF, because AFAIK it is
 -- the only useful thing to do with a file handle that has reached
 -- EOF.
-readInterleaved :: forall a b c. (ListLikePlus a c, Monoid b) =>
-                   [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> IO b
-readInterleaved pairs intf = newEmptyMVar >>= readInterleaved' pairs intf
+readInterleaved :: forall a b c. (ListLikePlus a c, ProcessOutput a b) =>
+                   [(a -> b, Handle)] -> IO b
+readInterleaved pairs = newEmptyMVar >>= readInterleaved' pairs
 
-readInterleaved' :: forall a b c. (ListLikePlus a c, Monoid b) =>
-                    [(a -> b, Handle)] -> (Either AsyncException IOError -> b) -> MVar (Either Handle b) -> IO b
-readInterleaved' pairs intf res = do
+readInterleaved' :: forall a b c. (ListLikePlus a c, ProcessOutput a b) =>
+                    [(a -> b, Handle)] -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs res = do
   mapM_ (forkIO . uncurry readHandle) pairs
   takeChunks (length pairs)
     where
@@ -114,47 +121,58 @@ readInterleaved' pairs intf res = do
              return (x <> xs)
       takeChunk = takeMVar res `catch` (\ (e :: AsyncException) -> return $ Right $ intf (Left e))
 
+instance ListLikePlus a c => ProcessOutput a (ExitCode, a, a) where
+    pidf _ = mempty
+    codef c = (c, mempty, mempty)
+    outf x = (mempty, x, mempty)
+    errf x = (mempty, mempty, x)
+    intf _ = mempty
+
 -- | An implementation of 'System.Process.readProcessWithExitCode'
 -- with a two generalizations: (1) The input and outputs can be any
 -- instance of 'ListLikePlus', and (2) The CreateProcess is passes an
 -- argument, so you can use either 'System.Process.proc' or
 -- 'System.Process.rawSystem' and you can modify its fields such as
 -- 'System.Process.cwd' before the process starts
-readCreateProcessWithExitCode
-    :: forall a c.
-       ListLikePlus a c =>
-       CreateProcess   -- ^ process to run
-    -> a               -- ^ standard input
-    -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
-readCreateProcessWithExitCode p input =
-    readProcessInterleaved (\ _ -> mempty)
-                           (\ c -> (c, mempty, mempty))
-                           (\ x -> (mempty, x, mempty))
-                           (\ x -> (mempty, mempty, x))
-                           (\ _ -> (mempty, mempty, mempty))
-                           p input
+readCreateProcessWithExitCode :: ListLikePlus a c =>
+                                 CreateProcess       -- ^ process to run
+                              -> a                   -- ^ standard input
+                              -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
+readCreateProcessWithExitCode p input = readProcessInterleaved p input
 
 -- | A version of 'System.Process.readProcessWithExitCode' that uses
 -- any instance of 'ListLikePlus' instead of 'String', implemented
 -- using 'readCreateProcessWithExitCode'.
-readProcessWithExitCode
-    :: ListLikePlus a c =>
-       FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
-    -> a               -- ^ standard input
-    -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
+readProcessWithExitCode :: ListLikePlus a c =>
+                           FilePath            -- ^ command to run
+                        -> [String]            -- ^ any arguments
+                        -> a                   -- ^ standard input
+                        -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
 readProcessWithExitCode cmd args input = readCreateProcessWithExitCode (proc cmd args) input
 
 -- | Implementation of 'System.Process.readProcess' that uses any
 -- instance of 'ListLikePlus' instead of 'String', implemented using
 -- 'readCreateProcess'.
-readProcess
-    :: ListLikePlus a c =>
-       FilePath                 -- ^ command to run
-    -> [String]                 -- ^ any arguments
-    -> a               -- ^ standard input
-    -> IO a            -- ^ stdout
+readProcess :: ListLikePlus a c =>
+               FilePath        -- ^ command to run
+            -> [String]        -- ^ any arguments
+            -> a               -- ^ standard input
+            -> IO a            -- ^ stdout
 readProcess cmd args = readCreateProcess (proc cmd args)
+
+newtype StdoutWrapper a = StdoutWrapper a
+
+instance Monoid a => Monoid (StdoutWrapper a) where
+    mempty = StdoutWrapper mempty
+    mappend (StdoutWrapper a) (StdoutWrapper b) = StdoutWrapper (a <> b)
+
+instance (ListLikePlus a c, Monoid a) => ProcessOutput a (StdoutWrapper a) where
+    pidf _ = mempty
+    codef ExitSuccess = mempty
+    codef failure = throw $ IO.mkIOError OtherError ("Process exited with " ++ show failure) Nothing Nothing
+    outf x = StdoutWrapper x
+    errf _ = mempty
+    intf _ = mempty
 
 -- | An implementation of 'System.Process.readProcess' with a two
 -- generalizations: (1) The input and outputs can be any instance of
@@ -169,11 +187,10 @@ readProcess cmd args = readCreateProcess (proc cmd args)
 -- nearly identical copy of the 'readProcessInterleaved' code which
 -- only passes one pair 'readInterleaved'.  REMEMBER to keep these two
 -- in sync if there are future changes!
-readCreateProcess
-    :: ListLikePlus a c =>
-       CreateProcess   -- ^ process to run
-    -> a               -- ^ standard input
-    -> IO a            -- ^ stdout
+readCreateProcess :: (ListLikePlus a c, ProcessOutput a (StdoutWrapper a)) =>
+                     CreateProcess   -- ^ process to run
+                  -> a               -- ^ standard input
+                  -> IO a            -- ^ stdout
 readCreateProcess p input = mask $ \restore -> do
   hs@(Just inh, Just outh, _, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = Inherit })
@@ -183,15 +200,11 @@ readCreateProcess p input = mask $ \restore -> do
   flip onException
     (do hClose inh; hClose outh;
         terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ (mappend <$> (readInterleaved [(id, outh)] (const mempty))
-                                   <*> (waitForProcess pid >>= codef))
+    waitOut <- forkWait $ (mappend <$> (readInterleaved [(StdoutWrapper, outh)])
+                                   <*> (waitForProcess pid >>= return . codef))
     writeInput inh input
-    waitOut
-
-    where
-      -- Throw an IO error on ExitFailure
-      codef (ExitFailure r) = throw (mkError "readCreateProcess: " (cmdspec p) r)
-      codef ExitSuccess = return mempty
+    StdoutWrapper x <- waitOut
+    return x
 
 -- | The output stream of a process returned by 'readProcessChunks'.
 data Chunk a
@@ -202,12 +215,18 @@ data Chunk a
     | Result ExitCode
     deriving Show
 
+instance ListLikePlus a c => ProcessOutput a [Chunk a] where
+    pidf = (: []) . ProcessHandle
+    outf = (: []) . Stdout
+    errf = (: []) . Stderr
+    intf = (: []) . Exception
+    codef = (: []) . Result
+
 -- | A concrete use of 'readProcessInterleaved' - build a list
 -- containing chunks of process output, any exceptions that get thrown
 -- (unimplemented), and finally an exit code.
 readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
-readProcessChunks p input =
-    readProcessInterleaved (\ h -> [ProcessHandle h]) (\ x -> [Result x]) (\ x -> [Stdout x]) (\ x -> [Stderr x]) (\ x -> [Exception x]) p input
+readProcessChunks p input = readProcessInterleaved p input
 
 -- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
 -- of data returned by 'readProcessChunks'.
@@ -239,15 +258,6 @@ forkWait a = do
   res <- newEmptyMVar
   _ <- mask $ \restore -> forkIO $ try (restore a) >>= putMVar res
   return (takeMVar res >>= either (\ex -> throwIO (ex :: SomeException)) return)
-
--- | Create an exception for a process that exited abnormally.
-mkError :: String -> CmdSpec -> Int -> IOError
-mkError prefix (RawCommand cmd args) r =
-    IO.mkIOError OtherError (prefix ++ showCommandForUser cmd args ++ " (exit " ++ show r ++ ")")
-                 Nothing Nothing
-mkError prefix (ShellCommand cmd) r =
-    IO.mkIOError OtherError (prefix ++ cmd ++ " (exit " ++ show r ++ ")")
-                 Nothing Nothing
 
 showCmdSpecForUser :: CmdSpec -> String
 showCmdSpecForUser (ShellCommand s) = s
