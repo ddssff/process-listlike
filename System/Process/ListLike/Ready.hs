@@ -74,14 +74,12 @@ lazyProcess :: ListLikeIOPlus a c =>
 lazyProcess exec args cwd env input =
     createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
 
-readCreateProcessWithExitCode
-    :: forall a c.
-       (ListLikeIOPlus a c) =>
-       CreateProcess   -- ^ process to run
-    -> a               -- ^ standard input
-    -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
-readCreateProcessWithExitCode p input =
-    readProcessInterleaved p input
+readCreateProcessWithExitCode :: forall a c.
+                                 (ListLikeIOPlus a c) =>
+                                 CreateProcess   -- ^ process to run
+                              -> a               -- ^ standard input
+                              -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
+readCreateProcessWithExitCode p input = readProcessInterleaved p input
 
 readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) =>
                           CreateProcess -> a -> IO b
