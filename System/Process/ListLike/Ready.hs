@@ -17,13 +17,13 @@ module System.Process.ListLike.Ready
 
 import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
-import Control.Exception
+import Control.Exception (catch, mask, onException, try, SomeException, throw)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
 import Data.Monoid (Monoid, mempty, mconcat, (<>))
 import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
 import System.Exit (ExitCode)
-import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe))
+import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe), terminateProcess)
 import System.IO (Handle, hSetBinaryMode, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process.ListLike.Class (Chunk(..), ProcessOutput(..), ListLikePlus(..))
@@ -85,10 +85,14 @@ readCreateProcessWithExitCode p input =
 
 readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) =>
                           CreateProcess -> a -> IO b
-readProcessInterleaved p input =
-    createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>=
-    readProcessChunks input >>=
-    return . mconcat . map doChunk
+readProcessInterleaved p input = mask $ \ restore -> do
+    hs@(Just inh, Just outh, Just errh, pid) <-
+        createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
+    onException
+      (restore $ readProcessChunks input hs >>= return . mconcat . map doChunk)
+      (do hPutStrLn stderr "endProcess"
+          hClose inh; hClose outh; hClose errh;
+          terminateProcess pid; waitForProcess pid)
     where
       doChunk (ProcessHandle x) = pidf x
       doChunk (Stdout x) = outf x
