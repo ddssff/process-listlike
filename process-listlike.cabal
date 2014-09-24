@@ -23,6 +23,7 @@ Library
   ghc-options:      -Wall -O2
 
   Exposed-modules:
+    Debug.Console
     System.Process.ListLike
     System.Process.ListLike.Chunks
     System.Process.ListLike.Class
