@@ -39,10 +39,6 @@ import Data.Word (Word8)
 -- For the test
 import System.IO (hPutStrLn, stderr)
 
-test1 = lazyCommand "yes | cat -n | while read i; do echo $i; sleep 1; done" L.empty  >>= mapM_ (hPutStrLn stderr . show)
-test2 = lazyCommand "ls -l /tmp" L.empty  >>= mapM_ (hPutStrLn stderr . show)
-test3 = lazyCommand "oneko" L.empty  >>= mapM_ (hPutStrLn stderr . show)
-
 class ListLikePlus a c => ListLikeIOPlus a c where
     hPutNonBlocking :: Handle -> a -> IO a
     chunks :: a -> [a]
@@ -74,25 +70,14 @@ lazyCommand cmd input =
     createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
 
 -- | Create a process with 'runInteractiveProcess' and run it with 'readProcessChunks'.
-lazyProcess :: ListLikeIOPlus a c =>
-               FilePath
-            -> [String]
-            -> Maybe FilePath
-            -> Maybe [(String, String)]
-            -> a
-            -> IO [Chunk a]
+lazyProcess :: ListLikeIOPlus a c => FilePath -> [String] -> Maybe FilePath -> Maybe [(String, String)] -> a -> IO [Chunk a]
 lazyProcess exec args cwd env input =
     createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
 
-readCreateProcessWithExitCode :: forall a c.
-                                 (ListLikeIOPlus a c) =>
-                                 CreateProcess   -- ^ process to run
-                              -> a               -- ^ standard input
-                              -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr, exception
+readCreateProcessWithExitCode :: (ListLikeIOPlus a c) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode p input = readProcessInterleaved p input
 
-readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) =>
-                          CreateProcess -> a -> IO b
+readProcessInterleaved :: (ListLikeIOPlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
 readProcessInterleaved p input = mask $ \ restore -> do
     hs@(Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
