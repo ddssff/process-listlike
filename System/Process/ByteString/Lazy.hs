@@ -10,30 +10,31 @@ module System.Process.ByteString.Lazy
     , readCreateProcessWithExitCode
     , readProcessInterleaved
     , readInterleaved
-    , Chunks.Chunk(..)
     , readProcessChunks
+    , module System.Process
+    , module System.Process.ListLike
     ) where
 
 import Data.ByteString.Lazy.Char8 (ByteString)
 import System.Exit (ExitCode)
 import System.IO (Handle)
-import System.Process (CreateProcess, ProcessHandle)
-import qualified System.Process.ListLike.Chunks as Chunks (Chunk(..), readProcessChunks)
-import System.Process.ListLike.Class
-import qualified System.Process.ListLike.Thread as R
-import System.Process.ListLike.Instances ()
+import System.Process hiding (readProcess, readProcessWithExitCode)
+import System.Process.ListLike hiding (readCreateProcess, readCreateProcessWithExitCode,
+                                       readProcess, readProcessWithExitCode,
+                                       readProcessInterleaved, readInterleaved, readProcessChunks)
+import qualified System.Process.ListLike as LL
 
 readProcess ::(a ~ ByteString) => FilePath -> [String] -> a -> IO a
-readProcess = R.readProcess
+readProcess = LL.readProcess
 readProcessWithExitCode ::(a ~ ByteString) => FilePath -> [String] -> a -> IO (ExitCode, a, a)
-readProcessWithExitCode = R.readProcessWithExitCode
+readProcessWithExitCode = LL.readProcessWithExitCode
 readCreateProcess ::(a ~ ByteString) => CreateProcess -> a -> IO a
-readCreateProcess = R.readCreateProcess
+readCreateProcess = LL.readCreateProcess
 readCreateProcessWithExitCode ::(a ~ ByteString) => CreateProcess -> a -> IO (ExitCode, a, a)
-readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
+readCreateProcessWithExitCode = LL.readCreateProcessWithExitCode
 readProcessInterleaved :: (a ~ ByteString, ProcessOutput a b) => (ProcessHandle -> IO ()) -> CreateProcess -> a -> IO b
-readProcessInterleaved = R.readProcessInterleaved
+readProcessInterleaved = LL.readProcessInterleaved
 readInterleaved :: (a ~ ByteString, ProcessOutput a b) => [(a -> b, Handle)] -> IO b -> IO b
-readInterleaved = R.readInterleaved
-readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [Chunks.Chunk a]
-readProcessChunks = Chunks.readProcessChunks
+readInterleaved = LL.readInterleaved
+readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [Chunk a]
+readProcessChunks = LL.readProcessChunks
