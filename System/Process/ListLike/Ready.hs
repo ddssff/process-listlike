@@ -20,6 +20,9 @@ import Control.Concurrent (threadDelay)
 import Control.Exception (catch, mask, onException, try, SomeException, throw)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
 import Data.Monoid (Monoid, mempty, mconcat, (<>))
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.IO as LT
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
 import System.Exit (ExitCode)
@@ -49,7 +52,14 @@ instance ListLikeIOPlus L.ByteString Word8 where
     -- Yes, This is ugly.  The question is, do we need to feed the
     -- input to the process in chunks or can we fork an input thread
     -- to do the feeding?  Probably...
-    chunks = map (L.fromChunks . (: [])) . L.toChunks
+    chunks = Prelude.map (L.fromChunks . (: [])) . L.toChunks
+
+instance ListLikeIOPlus LT.Text Char where
+    hPutNonBlocking h text = L.hPutNonBlocking h (encodeUtf8 text) >> return text
+    -- Yes, This is ugly.  The question is, do we need to feed the
+    -- input to the process in chunks or can we fork an input thread
+    -- to do the feeding?  Probably...
+    chunks = map (LT.fromChunks . (: [])) . LT.toChunks
 
 -- | This is the type returned by 'System.Process.createProcess' et. al.
 type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
