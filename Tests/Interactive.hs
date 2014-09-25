@@ -52,4 +52,10 @@ runners = [ ("Ready.readProcessInterleaved Lazy.Text",
           , ("Ready.readProcessInterleaved Lazy.ByteString",
              \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
                     mapM_ (hPutStrLn stderr . show) b)
+          , ("Thread.readProcessInterleaved Lazy.Text",
+             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
+                    mapM_ (hPutStrLn stderr . show) b)
+          , ("Thread.readProcessInterleaved Lazy.ByteString",
+             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
+                    mapM_ (hPutStrLn stderr . show) b)
           ]
