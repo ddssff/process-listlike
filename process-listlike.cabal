@@ -61,3 +61,19 @@ Executable process-listlike-tests
     text,
     utf8-string,
     unix
+
+Executable process-listlike-interactive-tests
+  Main-Is: Tests/Interactive.hs
+  GHC-Options: -Wall -O2 -threaded -rtsopts
+  Build-Depends:
+    base >= 4 && < 5,
+    bytestring,
+    deepseq,
+    HUnit,
+    ListLike,
+    mtl,
+    process,
+    process-listlike,
+    text,
+    utf8-string,
+    unix
