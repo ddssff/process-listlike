@@ -17,7 +17,7 @@ module System.Process.ByteString.Lazy
 import Data.ByteString.Lazy.Char8 (ByteString)
 import System.Exit (ExitCode)
 import System.IO (Handle)
-import System.Process (CreateProcess)
+import System.Process (CreateProcess, ProcessHandle)
 import qualified System.Process.ListLike.Chunks as Chunks (Chunk(..), readProcessChunks)
 import System.Process.ListLike.Class
 import qualified System.Process.ListLike.Thread as R
@@ -31,7 +31,7 @@ readCreateProcess ::(a ~ ByteString) => CreateProcess -> a -> IO a
 readCreateProcess = R.readCreateProcess
 readCreateProcessWithExitCode ::(a ~ ByteString) => CreateProcess -> a -> IO (ExitCode, a, a)
 readCreateProcessWithExitCode = R.readCreateProcessWithExitCode
-readProcessInterleaved :: (a ~ ByteString, ProcessOutput a b) => CreateProcess -> a -> IO b
+readProcessInterleaved :: (a ~ ByteString, ProcessOutput a b) => (ProcessHandle -> IO ()) -> CreateProcess -> a -> IO b
 readProcessInterleaved = R.readProcessInterleaved
 readInterleaved :: (a ~ ByteString, ProcessOutput a b) => [(a -> b, Handle)] -> IO b -> IO b
 readInterleaved = R.readInterleaved

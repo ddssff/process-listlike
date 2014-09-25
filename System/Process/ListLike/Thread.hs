@@ -33,11 +33,12 @@ import System.Process.ListLike.Instances ()
 -- | Read the output of a process and use the argument functions to
 -- convert it into a Monoid, preserving the order of appearance of the
 -- different chunks of output from standard output and standard error.
-readProcessInterleaved :: (ListLikePlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
-readProcessInterleaved  p input = mask $ \ restore -> do
+readProcessInterleaved :: (ListLikePlus a c, ProcessOutput a b) => (ProcessHandle -> IO ()) -> CreateProcess -> a -> IO b
+readProcessInterleaved  start p input = mask $ \ restore -> do
   hs@(Just inh, Just outh, Just errh, pid) <-
       createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe })
 
+  start pid
   setModes input hs
 
   onException
@@ -96,7 +97,7 @@ readCreateProcessWithExitCode :: ListLikePlus a c =>
                                  CreateProcess       -- ^ process to run
                               -> a                   -- ^ standard input
                               -> IO (ExitCode, a, a) -- ^ exitcode, stdout, stderr
-readCreateProcessWithExitCode p input = readProcessInterleaved p input
+readCreateProcessWithExitCode p input = readProcessInterleaved (\ pid -> return ())  p input
 
 -- | A version of 'System.Process.readProcessWithExitCode' that uses
 -- any instance of 'ListLikePlus' instead of 'String', implemented

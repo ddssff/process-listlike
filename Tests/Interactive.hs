@@ -5,6 +5,7 @@ module Main where
 import qualified Data.Text.Lazy
 import qualified Data.ByteString.Lazy
 import Data.Monoid
+import Debug.Console (ePutStrLn)
 import System.Process
 import System.Process.ListLike.Chunks (Chunk)
 import qualified System.Process.ListLike.Class as Class
@@ -53,9 +54,11 @@ runners = [ ("Ready.readProcessInterleaved Lazy.Text",
              \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
                     mapM_ (hPutStrLn stderr . show) b)
           , ("Thread.readProcessInterleaved Lazy.Text",
-             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
+             \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
                     mapM_ (hPutStrLn stderr . show) b)
           , ("Thread.readProcessInterleaved Lazy.ByteString",
-             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
+             \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
                     mapM_ (hPutStrLn stderr . show) b)
           ]
+
+st pid = ePutStrLn ("pid=" ++ show pid)

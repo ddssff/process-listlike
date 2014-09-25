@@ -23,6 +23,7 @@ import Data.Monoid (Monoid(mempty), (<>), mconcat)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
 import Data.Text.Lazy.Encoding (encodeUtf8)
+import Debug.Console (ePutStrLn)
 import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
 import System.Exit (ExitCode)
@@ -64,29 +65,30 @@ maxUSecs = 100000	-- maximum wait time (microseconds)
 
 -- | Create a process with 'runInteractiveCommand' and run it with 'readProcessInterleaved'.
 lazyCommand :: ListLikeIOPlus a c => String -> a -> IO [Chunk a]
-lazyCommand cmd input = readProcessInterleaved (shell cmd) input
+lazyCommand cmd input = readProcessInterleaved (\ _ -> return ()) (shell cmd) input
 
 -- | Create a process with 'runInteractiveProcess' and run it with 'readProcessInterleaved'.
 lazyProcess :: ListLikeIOPlus a c => FilePath -> [String] -> Maybe FilePath -> Maybe [(String, String)] -> a -> IO [Chunk a]
-lazyProcess exec args cwd env input = readProcessInterleaved ((proc exec args) {cwd = cwd, env = env}) input
+lazyProcess exec args cwd env input = readProcessInterleaved (\ _ -> return ()) ((proc exec args) {cwd = cwd, env = env}) input
 
 readCreateProcessWithExitCode :: (ListLikeIOPlus a c) => CreateProcess -> a -> IO (ExitCode, a, a)
-readCreateProcessWithExitCode = readProcessInterleaved
+readCreateProcessWithExitCode = readProcessInterleaved (\ _ -> return ())
 
 readProcessChunks :: ListLikeIOPlus a c => CreateProcess -> a -> IO [Chunk a]
-readProcessChunks = readProcessInterleaved
+readProcessChunks = readProcessInterleaved (\ _ -> return ())
 
-readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
-readProcessInterleaved p input = mask $ \ restore -> do
+readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => (ProcessHandle -> IO ()) -> CreateProcess -> a -> IO b
+readProcessInterleaved start p input = mask $ \ restore -> do
     hs@(Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
 
+    start pid
     setModes input hs
 
     onException
       (restore $ (<>) <$> pure (pidf pid)
                       <*> elements pid (chunks input, Just inh, [(outf, outh), (errf, errh)], Nothing))
-      (do hPutStrLn stderr "endProcess"
+      (do ePutStrLn "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)
     where
