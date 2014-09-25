@@ -1,3 +1,17 @@
+haskell-process-listlike (1.2) unstable; urgency=low
+
+  * Add the old non-threaded code for interleaved reading in
+    System.Process.ListLike.Ready
+  * Re-arrange the modules in System.Process.Listlike - they are
+    now Class, Instances, Thread, Ready, and Chunks.
+  * Fix a bug that was blocking processes that didn't exit
+  * Add a function parameter to readProcessInterleaved to receive
+    the ProcessHandle.
+  * Add interactive tests, which start non-terminating processes
+    to see if they block and what happens when you interrupt them.
+
+ -- David Fox <dsf@seereason.com>  Thu, 25 Sep 2014 13:19:59 -0700
+
 haskell-process-listlike (1.1) unstable; urgency=low
 
   * Extend the exception type that Chunk can carry from IOError
