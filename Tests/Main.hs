@@ -13,7 +13,7 @@ import Prelude hiding (length, concat, null)
 import GHC.IO.Exception
 import System.Exit
 import System.Posix.Files (getFileStatus, fileMode, setFileMode, unionFileModes, ownerExecuteMode, groupExecuteMode, otherExecuteMode)
-import System.Process (proc, shell)
+import System.Process (CreateProcess, proc, shell)
 import System.Process.ListLike (readProcessWithExitCode, readCreateProcessWithExitCode, readCreateProcess, ListLikePlus(..), Chunk(..), readProcessChunks)
 import Test.HUnit hiding (path)
 
