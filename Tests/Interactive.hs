@@ -6,9 +6,11 @@ import qualified Data.Text.Lazy
 import qualified Data.ByteString.Lazy
 import Data.Monoid
 import System.Process
-import System.Process.ListLike.Class
+import System.Process.ListLike.Chunks (Chunk)
+import qualified System.Process.ListLike.Class as Class
 import System.Process.ListLike.Instances ()
 import qualified System.Process.ListLike.Ready as Ready
+import qualified System.Process.ListLike.Thread as Thread
 import System.Environment
 import System.IO
 import Text.Read (readMaybe)

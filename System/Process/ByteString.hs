@@ -19,11 +19,9 @@ import System.Exit (ExitCode)
 import System.IO (Handle)
 import System.Process (CreateProcess)
 import System.Process.ListLike.Chunks hiding (readProcessChunks)
-import System.Process.ListLike.Class hiding
-    (readProcess, readProcessWithExitCode,
-     readCreateProcess, readCreateProcessWithExitCode,
-     readProcessInterleaved, readInterleaved, readProcessChunks)
-import qualified System.Process.ListLike.Class as R
+import System.Process.ListLike.Class (ProcessOutput)
+import qualified System.Process.ListLike.Thread as R
+import qualified System.Process.ListLike.Chunks as R (Chunk, readProcessChunks)
 import System.Process.ListLike.Instances ()
 
 readProcess :: (a ~ ByteString) => FilePath -> [String] -> a -> IO a

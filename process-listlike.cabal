@@ -28,6 +28,7 @@ Library
     System.Process.ListLike.Chunks
     System.Process.ListLike.Class
     System.Process.ListLike.Ready
+    System.Process.ListLike.Thread
     System.Process.ByteString
     System.Process.ByteString.Lazy
     System.Process.ListLike.Instances

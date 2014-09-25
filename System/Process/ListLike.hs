@@ -3,11 +3,14 @@
 module System.Process.ListLike (
   module System.Process.ListLike.Class,
   module System.Process.ListLike.Chunks,
-  System.Process.proc,
-  System.Process.shell
+  module System.Process.ListLike.Ready,
+  module System.Process.ListLike.Thread,
+  module System.Process
   ) where
 
-import System.Process (proc, shell)
+import System.Process hiding (readProcess, readProcessWithExitCode)
 import System.Process.ListLike.Class
 import System.Process.ListLike.Instances ()
 import System.Process.ListLike.Chunks
+import System.Process.ListLike.Ready hiding (readProcessChunks, readProcessInterleaved, readCreateProcessWithExitCode)
+import System.Process.ListLike.Thread

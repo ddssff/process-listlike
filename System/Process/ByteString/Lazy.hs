@@ -10,21 +10,17 @@ module System.Process.ByteString.Lazy
     , readCreateProcessWithExitCode
     , readProcessInterleaved
     , readInterleaved
+    , Chunks.Chunk(..)
     , readProcessChunks
-    , module System.Process.ListLike.Class
-    , module System.Process.ListLike.Chunks
     ) where
 
 import Data.ByteString.Lazy.Char8 (ByteString)
 import System.Exit (ExitCode)
 import System.IO (Handle)
 import System.Process (CreateProcess)
-import System.Process.ListLike.Chunks hiding (readProcessChunks)
-import System.Process.ListLike.Class hiding
-    (readProcess, readProcessWithExitCode,
-     readCreateProcess, readCreateProcessWithExitCode,
-     readProcessInterleaved, readInterleaved, readProcessChunks)
-import qualified System.Process.ListLike.Class as R
+import qualified System.Process.ListLike.Chunks as Chunks (Chunk(..), readProcessChunks)
+import System.Process.ListLike.Class
+import qualified System.Process.ListLike.Thread as R
 import System.Process.ListLike.Instances ()
 
 readProcess ::(a ~ ByteString) => FilePath -> [String] -> a -> IO a
@@ -39,5 +35,5 @@ readProcessInterleaved :: (a ~ ByteString, ProcessOutput a b) => CreateProcess -
 readProcessInterleaved = R.readProcessInterleaved
 readInterleaved :: (a ~ ByteString, ProcessOutput a b) => [(a -> b, Handle)] -> IO b
 readInterleaved = R.readInterleaved
-readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [R.Chunk a]
-readProcessChunks = R.readProcessChunks
+readProcessChunks :: (a ~ ByteString) => CreateProcess -> a -> IO [Chunks.Chunk a]
+readProcessChunks = Chunks.readProcessChunks

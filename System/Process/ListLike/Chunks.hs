@@ -1,9 +1,9 @@
 -- | Support for using the 'Chunk' list returned by 'readProcessChunks'.
-{-# LANGUAGE ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, TypeFamilies, UndecidableInstances #-}
 module System.Process.ListLike.Chunks
-    ( -- * Re-exports
-      System.Process.ListLike.Class.Chunk(..)
-    , System.Process.ListLike.Class.readProcessChunks
+    ( -- * Basics
+      Chunk(..)
+    , readProcessChunks
     -- * Folds
     , foldChunk
     , foldChunks
@@ -45,6 +45,7 @@ module System.Process.ListLike.Chunks
     ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.DeepSeq (NFData)
 import Control.Exception (AsyncException)
 import Control.Monad (void)
 import Control.Monad.State (StateT, evalStateT, evalState, get, put)
@@ -59,14 +60,42 @@ import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.IO (stderr)
 import System.IO.Error (mkIOError)
 import System.Process (ProcessHandle, CreateProcess(cmdspec, cwd))
-import System.Process.ListLike.Class (ListLikePlus, showCmdSpecForUser, Chunk(..), readProcessChunks)
+import System.Process.ListLike.Class (ListLikePlus, ProcessOutput(pidf, outf, errf, intf, codef), showCmdSpecForUser)
+import System.Process.ListLike.Thread (readProcessInterleaved)
 
+-- | The output stream of a process returned by 'readProcessChunks'.
+data Chunk a
+    = ProcessHandle ProcessHandle -- ^ This will always come first
+    | Stdout a
+    | Stderr a
+    | Exception (Either AsyncException IOError)
+    | Result ExitCode
+    deriving Show
+
+instance ListLikePlus a c => ProcessOutput a [Chunk a] where
+    pidf = (: []) . ProcessHandle
+    outf = (: []) . Stdout
+    errf = (: []) . Stderr
+    intf = (: []) . Exception
+    codef = (: []) . Result
+
+-- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
+-- of data returned by 'readProcessChunks'.
+instance NFData ExitCode
+
+-- | A concrete use of 'readProcessInterleaved' - build a list
+-- containing chunks of process output, any exceptions that get thrown
+-- (unimplemented), and finally an exit code.
+readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
+readProcessChunks p input = readProcessInterleaved p input
+
+-- Deprecated - use ProcessOutput instances instead
 foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> (ExitCode -> b) -> Chunk a -> b
-foldChunk pidf _ _ _ _ (ProcessHandle x) = pidf x
-foldChunk _ outf _ _ _ (Stdout x) = outf x
-foldChunk _ _ errf _ _ (Stderr x) = errf x
-foldChunk _ _ _ exnf _ (Exception x) = exnf x
-foldChunk _ _ _ _ exitf (Result x) = exitf x
+foldChunk f _ _ _ _ (ProcessHandle x) = f x
+foldChunk _ f _ _ _ (Stdout x) = f x
+foldChunk _ _ f _ _ (Stderr x) = f x
+foldChunk _ _ _ f _ (Exception x) = f x
+foldChunk _ _ _ _ f (Result x) = f x
 
 -- | Build a value from a chunk stream.
 foldChunks :: (r -> Chunk a -> r) -> r -> [Chunk a] -> r

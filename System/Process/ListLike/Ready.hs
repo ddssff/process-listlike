@@ -26,9 +26,10 @@ import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
 import System.Exit (ExitCode)
 import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe), terminateProcess)
-import System.IO (Handle, hSetBinaryMode, hReady, hClose)
+import System.IO (Handle, hSetBinaryMode, hReady, hClose, hSetBuffering, BufferMode(LineBuffering, BlockBuffering, NoBuffering))
 import System.IO.Unsafe (unsafeInterleaveIO)
-import System.Process.ListLike.Class (Chunk(..), ProcessOutput(..), ListLikePlus(..))
+import System.Process.ListLike.Chunks (Chunk(..))
+import System.Process.ListLike.Class (ProcessOutput(..), ListLikePlus(..))
 import System.Process.ListLike.Instances ()
 
 -- For the ListLikeIOPlus instance
