@@ -42,10 +42,8 @@ readProcessInterleaved  p input = mask $ \ restore -> do
 
   onException
     (restore $
-     do waitOut <- forkWait $ (\ a b c -> mconcat [a,b,c])
-                                 <$> pure (pidf pid)
-                                 <*> readInterleaved [(outf, outh), (errf, errh)]
-                                 <*> (codef <$> waitForProcess pid)
+     do waitOut <- forkWait $ (<>) <$> pure (pidf pid)
+                                   <*> readInterleaved [(outf, outh), (errf, errh)] (codef <$> waitForProcess pid)
         writeInput inh input
         waitOut)
     (do hClose inh; hClose outh; hClose errh;
@@ -57,12 +55,12 @@ readProcessInterleaved  p input = mask $ \ restore -> do
 -- the only useful thing to do with a file handle that has reached
 -- EOF.
 readInterleaved :: forall a b c. (ListLikePlus a c, ProcessOutput a b) =>
-                   [(a -> b, Handle)] -> IO b
-readInterleaved pairs = newEmptyMVar >>= readInterleaved' pairs
+                   [(a -> b, Handle)] -> IO b -> IO b
+readInterleaved pairs finish = newEmptyMVar >>= readInterleaved' pairs finish
 
 readInterleaved' :: forall a b c. (ListLikePlus a c, ProcessOutput a b) =>
-                    [(a -> b, Handle)] -> MVar (Either Handle b) -> IO b
-readInterleaved' pairs res = do
+                    [(a -> b, Handle)] -> IO b -> MVar (Either Handle b) -> IO b
+readInterleaved' pairs finish res = do
   mapM_ (forkIO . uncurry readHandle) pairs
   takeChunks (length pairs)
     where
@@ -79,7 +77,7 @@ readInterleaved' pairs res = do
         hClose h
         putMVar res (Left h)
       takeChunks :: Int -> IO b
-      takeChunks 0 = return mempty
+      takeChunks 0 = finish
       takeChunks openCount = takeChunk >>= takeMore openCount
       takeMore :: Int -> Either Handle b -> IO b
       takeMore openCount (Left h) = hClose h >> takeChunks (openCount - 1)
@@ -159,8 +157,7 @@ readCreateProcess p input = mask $ \restore -> do
 
   onException
     (restore $
-     do waitOut <- forkWait $ (mappend <$> (readInterleaved [(StdoutWrapper, outh)])
-                                       <*> (waitForProcess pid >>= return . codef))
+     do waitOut <- forkWait $ (readInterleaved [(StdoutWrapper, outh)] (waitForProcess pid >>= return . codef))
         writeInput inh input
         StdoutWrapper x <- waitOut
         return x)
