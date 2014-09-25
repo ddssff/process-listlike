@@ -18,7 +18,8 @@ import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
 import Control.Exception (catch, mask, onException)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
-import Data.Monoid (Monoid(mempty), (<>))
+import Data.Maybe (mapMaybe)
+import Data.Monoid (Monoid(mempty), (<>), mconcat)
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -84,34 +85,34 @@ readProcessInterleaved p input = mask $ \ restore -> do
 
     onException
       (restore $ (<>) <$> pure (pidf pid)
-                      <*> elements pid (chunks input, Just inh, Just outh, Just errh, Nothing))
+                      <*> elements pid (chunks input, Just inh, [(outf, outh), (errf, errh)], Nothing))
       (do hPutStrLn stderr "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)
     where
-      elements :: ProcessHandle -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b) -> IO b
+      elements :: ProcessHandle -> ([a], Maybe Handle, [(a -> b, Handle)], Maybe b) -> IO b
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
       -- elements that does not recurse is the one that adds a Result,
       -- and nowhere else is a Result added.  However, the process
       -- doing the traversing might die before that end is reached.
-      elements pid (_, _, Nothing, Nothing, elems) =
+      elements pid (_, _, [], elems) =
           do result <- waitForProcess pid
              -- Note that there is no need to insert the result code
              -- at the end of the list.
              return $ codef result <> maybe mempty id elems
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements pid tl@(_, _, _, _, Nothing) = ready uSecs tl >>= elements pid
+      elements pid tl@(_, _, _, Nothing) = ready uSecs tl >>= elements pid
       -- Add some output to the result value
-      elements pid (input, inh, outh, errh, Just elems) =
+      elements pid (input, inh, pairs, Just elems) =
           (<>) <$> pure elems
-               <*> unsafeInterleaveIO (elements pid (input, inh, outh, errh, Nothing))
+               <*> unsafeInterleaveIO (elements pid (input, inh, pairs, Nothing))
 
 -- A quick fix for the issue where hWaitForInput has actually started
 -- raising the isEOFError exception in ghc 6.10.
-data Readyness = Ready | Unready | EndOfFile
+data Readyness = Ready | Unready | EndOfFile deriving Eq
 
 hReady' :: Handle -> IO Readyness
 hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) `catch` (\ (e :: IOError) ->
@@ -126,52 +127,47 @@ hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) 
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
 ready :: (ListLikeIOPlus a c, ProcessOutput a b) =>
-         Int -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b)
-      -> IO ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b)
-ready waitUSecs (input, inh, outh, errh, elems) =
+         Int -> ([a], Maybe Handle, [(a -> b, Handle)], Maybe b)
+      -> IO ([a], Maybe Handle, [(a -> b, Handle)], Maybe b)
+ready waitUSecs (input, inh, pairs, elems) =
     do
-      outReady <- maybe (return Unready) hReady' outh
-      errReady <- maybe (return Unready) hReady' errh
-      case (input, inh, outReady, errReady) of
+      anyReady <- mapM (hReady' . snd) pairs
+      case (input, inh, anyReady) of
         -- Input exhausted, close the input handle.
-        ([], Just handle, Unready, Unready) ->
+        ([], Just handle, _) | all (== Unready) anyReady ->
             do hClose handle
-               ready  waitUSecs ([], Nothing, outh, errh, elems)
+               ready  waitUSecs ([], Nothing, pairs, elems)
         -- Input handle closed and there are no ready output handles,
         -- wait a bit
-        ([], Nothing, Unready, Unready) ->
+        ([], Nothing, _) | all (== Unready) anyReady ->
             do threadDelay waitUSecs
                --ePut0 ("Slept " ++ show uSecs ++ " microseconds\n")
-               ready (min maxUSecs (2 * waitUSecs)) (input, inh, outh, errh, elems)
+               ready (min maxUSecs (2 * waitUSecs)) (input, inh, pairs, elems)
         -- Input is available and there are no ready output handles
-        (input : etc, Just handle, Unready, Unready)
+        (input : etc, Just handle, _)
             -- Discard a zero byte input
-            | null input -> ready waitUSecs (etc, inh, outh, errh, elems)
+            | all (== Unready) anyReady && null input -> ready waitUSecs (etc, inh, pairs, elems)
             -- Send some input to the process
-            | True ->
+            | all (== Unready) anyReady ->
                 do input' <- hPutNonBlocking handle input
                    case null input' of
                      -- Input buffer is full too, sleep.
                      True -> do threadDelay uSecs
-                                ready (min maxUSecs (2 * waitUSecs)) (input : etc, inh, outh, errh, elems)
+                                ready (min maxUSecs (2 * waitUSecs)) (input : etc, inh, pairs, elems)
                      -- We wrote some input, discard it and continue
-                     False -> return (input' : etc, Just handle, outh, errh, elems)
+                     False -> return (input' : etc, Just handle, pairs, elems)
         -- One or both output handles are ready, try to read from them
         _ ->
-            do (out1, errh') <- nextOut errh errReady errf
-               (out2, outh') <- nextOut outh outReady outf
-               -- The Monoid instance for Maybe is such that elems <>
-               -- out1 <> out2 will be Nothing if all three arguments
-               -- are Nothing.
-               return (input, inh, outh', errh', elems <> out1 <> out2)
+            do allOutputs <- mapM (\ ((f, h), r) -> nextOut h r f) (zip pairs anyReady)
+               let newPairs = mapMaybe (\ ((_, mh), (f, _)) -> maybe Nothing (\ h -> Just (f, h)) mh) (zip allOutputs pairs)
+               return (input, inh, newPairs, elems <> mconcat (map fst allOutputs))
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
-nextOut :: (ListLikeIO a c, ProcessOutput a b) => (Maybe Handle) -> Readyness -> (a -> b) -> IO (Maybe b, Maybe Handle)
-nextOut Nothing _ _ = return (Nothing, Nothing)	-- Handle is closed
+nextOut :: (ListLikeIO a c, ProcessOutput a b) => Handle -> Readyness -> (a -> b) -> IO (Maybe b, Maybe Handle)
 nextOut _ EndOfFile _ = return (Nothing, Nothing)	-- Handle is closed
-nextOut handle Unready _ = return (Nothing, handle)	-- Handle is not ready
-nextOut (Just handle) Ready constructor =	-- Perform a read 
+nextOut handle Unready _ = return (Nothing, Just handle)	-- Handle is not ready
+nextOut handle Ready constructor =	-- Perform a read
     do
       a <- hGetNonBlocking handle bufSize
       case length a of
