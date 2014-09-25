@@ -19,7 +19,7 @@ import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
 import Control.Exception (catch, mask, onException, try, SomeException, throw)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
-import Data.Monoid (Monoid, mempty, mconcat, (<>))
+import Data.Monoid (Monoid(mempty, mappend), mconcat, (<>))
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -82,49 +82,41 @@ readProcessInterleaved p input = mask $ \ restore -> do
     hs@(Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
     onException
-      (restore $ readProcessChunks input hs >>= return . mconcat . map doChunk)
+      (restore $ readProcessChunks input hs)
       (do hPutStrLn stderr "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)
-    where
-      doChunk (ProcessHandle x) = pidf x
-      doChunk (Stdout x) = outf x
-      doChunk (Stderr x) = errf x
-      doChunk (Exception x) = intf x
-      doChunk (Result x) = codef x
 
 -- | Take a tuple like that returned by 'runInteractiveProcess',
 -- create a process, send the list of inputs to its stdin and return
 -- the lazy list of 'Output' objects.
-readProcessChunks :: ListLikeIOPlus a c => a -> Process -> IO [Chunk a]
+readProcessChunks :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => a -> Process -> IO b
 readProcessChunks input (mb_inh, mb_outh, mb_errh, pid) =
-    (<>) <$> pure [ProcessHandle pid]
+    (<>) <$> pure (pidf pid)
          <*> do maybe (return ()) (`hSetBinaryMode` True) mb_inh
                 maybe (return ()) (`hSetBinaryMode` True) mb_outh
                 maybe (return ()) (`hSetBinaryMode` True) mb_errh
-                elements (chunks input, mb_inh, mb_outh, mb_errh, [])
+                elements (chunks input, mb_inh, mb_outh, mb_errh, Nothing)
     where
-      elements :: ListLikeIOPlus a c => ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a]) -> IO [Chunk a]
+      elements :: ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b) -> IO b
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
       -- elements that does not recurse is the one that adds a Result,
-      -- and there is nowhere else where a Result is added.  However,
-      -- the process doing the traversing may die before that end is
-      -- reached.
+      -- and nowhere else is a Result added.  However, the process
+      -- doing the traversing might die before that end is reached.
       elements (_, _, Nothing, Nothing, elems) =
           do result <- waitForProcess pid
              -- Note that there is no need to insert the result code
              -- at the end of the list.
-             return $ Result result : elems
+             return $ codef result <> maybe mempty id elems
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements tl@(_, _, _, _, []) = ready uSecs tl >>= elements
+      elements tl@(_, _, _, _, Nothing) = ready uSecs tl >>= elements
       -- Add some output to the result value
-      elements (input, inh, outh, errh, elems) =
-          do
-            etc <- unsafeInterleaveIO (elements (input, inh, outh, errh, []))
-            return $ elems ++ etc
+      elements (input, inh, outh, errh, Just elems) =
+          (<>) <$> pure elems
+               <*> unsafeInterleaveIO (elements (input, inh, outh, errh, Nothing))
 
 -- A quick fix for the issue where hWaitForInput has actually started
 -- raising the isEOFError exception in ghc 6.10.
@@ -142,9 +134,9 @@ hReady' h = (hReady h >>= (\ flag -> return (if flag then Ready else Unready))) 
 -- are accepted.  If no input is accepted, or the input handle is
 -- already closed, and none of the output descriptors are ready for
 -- reading the function sleeps and tries again.
-ready :: ListLikeIOPlus a c =>
-         Int -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a])
-      -> IO ([a], Maybe Handle, Maybe Handle, Maybe Handle, [Chunk a])
+ready :: (ListLikeIOPlus a c, ProcessOutput a b) =>
+         Int -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b)
+      -> IO ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b)
 ready waitUSecs (input, inh, outh, errh, elems) =
     do
       outReady <- maybe (return Unready) hReady' outh
@@ -175,16 +167,19 @@ ready waitUSecs (input, inh, outh, errh, elems) =
                      False -> return (input' : etc, Just handle, outh, errh, elems)
         -- One or both output handles are ready, try to read from them
         _ ->
-            do (out1, errh') <- nextOut errh errReady Stderr
-               (out2, outh') <- nextOut outh outReady Stdout
-               return (input, inh, outh', errh', elems ++ out1 ++ out2)
+            do (out1, errh') <- nextOut errh errReady errf
+               (out2, outh') <- nextOut outh outReady outf
+               -- The Monoid instance for Maybe is such that elems <>
+               -- out1 <> out2 will be Nothing if all three arguments
+               -- are Nothing.
+               return (input, inh, outh', errh', elems <> out1 <> out2)
 
 -- | Return the next output element and the updated handle
 -- from a handle which is assumed ready.
-nextOut :: ListLikeIO a c => (Maybe Handle) -> Readyness -> (a -> Chunk a) -> IO ([Chunk a], Maybe Handle)
-nextOut Nothing _ _ = return ([], Nothing)	-- Handle is closed
-nextOut _ EndOfFile _ = return ([], Nothing)	-- Handle is closed
-nextOut handle Unready _ = return ([], handle)	-- Handle is not ready
+nextOut :: (ListLikeIO a c, ProcessOutput a b) => (Maybe Handle) -> Readyness -> (a -> b) -> IO (Maybe b, Maybe Handle)
+nextOut Nothing _ _ = return (Nothing, Nothing)	-- Handle is closed
+nextOut _ EndOfFile _ = return (Nothing, Nothing)	-- Handle is closed
+nextOut handle Unready _ = return (Nothing, handle)	-- Handle is not ready
 nextOut (Just handle) Ready constructor =	-- Perform a read 
     do
       a <- hGetNonBlocking handle bufSize
@@ -192,6 +187,6 @@ nextOut (Just handle) Ready constructor =	-- Perform a read
         -- A zero length read, unlike a zero length write, always
         -- means EOF.
         0 -> do hClose handle
-                return ([], Nothing)
+                return (Nothing, Nothing)
         -- Got some input
-        _n -> return ([constructor a], Just handle)
+        _n -> return (Just (constructor a), Just handle)
