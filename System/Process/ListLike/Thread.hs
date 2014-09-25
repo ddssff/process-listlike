@@ -18,7 +18,7 @@ import Control.Monad
 import Data.ListLike (ListLike(..), ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
-import Data.Monoid (Monoid(mempty, mappend), (<>))
+import Data.Monoid (Monoid(mempty, mappend), mconcat, (<>))
 import GHC.IO.Exception (IOErrorType(OtherError, ResourceVanished), IOException(ioe_type))
 import Prelude hiding (null, length, rem)
 import System.Exit (ExitCode(ExitSuccess))
@@ -40,15 +40,16 @@ readProcessInterleaved  p input = mask $ \ restore -> do
 
   setModes input hs
 
-  flip onException
+  onException
+    (restore $
+     do waitOut <- forkWait $ (\ a b c -> mconcat [a,b,c])
+                                 <$> pure (pidf pid)
+                                 <*> readInterleaved [(outf, outh), (errf, errh)]
+                                 <*> (codef <$> waitForProcess pid)
+        writeInput inh input
+        waitOut)
     (do hClose inh; hClose outh; hClose errh;
-        terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ do start <- pure (pidf pid)
-                             output <- readInterleaved [(outf, outh), (errf, errh)]
-                             result <- codef <$> waitForProcess pid
-                             return $ start <> output <> result
-    writeInput inh input
-    waitOut
+        terminateProcess pid; waitForProcess pid)
 
 -- | Simultaneously read the output from several file handles, using
 -- the associated functions to add them to a Monoid b in the order
@@ -156,14 +157,15 @@ readCreateProcess p input = mask $ \restore -> do
 
   setModes input hs
 
-  flip onException
+  onException
+    (restore $
+     do waitOut <- forkWait $ (mappend <$> (readInterleaved [(StdoutWrapper, outh)])
+                                       <*> (waitForProcess pid >>= return . codef))
+        writeInput inh input
+        StdoutWrapper x <- waitOut
+        return x)
     (do hClose inh; hClose outh;
-        terminateProcess pid; waitForProcess pid) $ restore $ do
-    waitOut <- forkWait $ (mappend <$> (readInterleaved [(StdoutWrapper, outh)])
-                                   <*> (waitForProcess pid >>= return . codef))
-    writeInput inh input
-    StdoutWrapper x <- waitOut
-    return x
+        terminateProcess pid; waitForProcess pid)
 
 -- Is this rude?  It will collide with any other bogus Show
 -- ProcessHandle instances created elsewhere.

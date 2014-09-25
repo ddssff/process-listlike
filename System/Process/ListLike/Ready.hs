@@ -77,14 +77,14 @@ readProcessChunks = readProcessInterleaved
 
 readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
 readProcessInterleaved p input = mask $ \ restore -> do
-    (Just inh, Just outh, Just errh, pid) <-
+    hs@(Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
+
+    setModes input hs
+
     onException
       (restore $ (<>) <$> pure (pidf pid)
-                      <*> do hSetBinaryMode inh True
-                             hSetBinaryMode outh True
-                             hSetBinaryMode errh True
-                             elements pid (chunks input, Just inh, Just outh, Just errh, Nothing))
+                      <*> elements pid (chunks input, Just inh, Just outh, Just errh, Nothing))
       (do hPutStrLn stderr "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)

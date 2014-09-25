@@ -22,7 +22,7 @@ import System.IO (hSetBinaryMode)
 import System.Process.ListLike.Class (ListLikePlus(..), ProcessOutput(..))
 
 instance ListLikePlus B.ByteString Word8 where
-  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
+  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f = maybe (return ()) (\ h -> hSetBinaryMode h True)
   readChunks h = hGetContents h >>= return . force . (: [])
 
 instance ListLikePlus T.Text Char where
@@ -30,7 +30,7 @@ instance ListLikePlus T.Text Char where
   readChunks h = hGetContents h >>= return . force . (: [])
 
 instance ListLikePlus L.ByteString Word8 where
-  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f mh = maybe (return ()) (\ h -> hSetBinaryMode h True) mh
+  setModes _ (inh, outh, errh, _) = f inh >> f outh >> f errh where f = maybe (return ()) (\ h -> hSetBinaryMode h True)
   readChunks h = hGetContents h >>= evaluate . Prelude.map (L.fromChunks . (: [])) . L.toChunks
 
 instance ListLikePlus LT.Text Char where
