@@ -9,7 +9,6 @@
 module System.Process.ListLike.Ready
     ( readCreateProcessWithExitCode
     , readProcessInterleaved
-    , Process
     , readProcessChunks
     , lazyCommand
     , lazyProcess
@@ -17,9 +16,9 @@ module System.Process.ListLike.Ready
 
 import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
-import Control.Exception (catch, mask, onException, try, SomeException, throw)
+import Control.Exception (catch, mask, onException)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
-import Data.Monoid (Monoid(mempty, mappend), mconcat, (<>))
+import Data.Monoid (Monoid(mempty), (<>))
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.IO as LT
 import Data.Text.Lazy.Encoding (encodeUtf8)
@@ -57,66 +56,57 @@ instance ListLikeIOPlus LT.Text Char where
     -- to do the feeding?  Probably...
     chunks = map (LT.fromChunks . (: [])) . LT.toChunks
 
--- | This is the type returned by 'System.Process.createProcess' et. al.
-type Process = (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
-
 bufSize = 65536		-- maximum chunk size
 uSecs = 8		-- minimum wait time, doubles each time nothing is ready
 maxUSecs = 100000	-- maximum wait time (microseconds)
 
--- | Create a process with 'runInteractiveCommand' and run it with 'readProcessChunks'.
+-- | Create a process with 'runInteractiveCommand' and run it with 'readProcessInterleaved'.
 lazyCommand :: ListLikeIOPlus a c => String -> a -> IO [Chunk a]
-lazyCommand cmd input =
-    createProcess ((shell cmd) {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
+lazyCommand cmd input = readProcessInterleaved (shell cmd) input
 
--- | Create a process with 'runInteractiveProcess' and run it with 'readProcessChunks'.
+-- | Create a process with 'runInteractiveProcess' and run it with 'readProcessInterleaved'.
 lazyProcess :: ListLikeIOPlus a c => FilePath -> [String] -> Maybe FilePath -> Maybe [(String, String)] -> a -> IO [Chunk a]
-lazyProcess exec args cwd env input =
-    createProcess ((proc exec args) {cwd = cwd, env = env, std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe}) >>= readProcessChunks input
+lazyProcess exec args cwd env input = readProcessInterleaved ((proc exec args) {cwd = cwd, env = env}) input
 
 readCreateProcessWithExitCode :: (ListLikeIOPlus a c) => CreateProcess -> a -> IO (ExitCode, a, a)
-readCreateProcessWithExitCode p input = readProcessInterleaved p input
+readCreateProcessWithExitCode = readProcessInterleaved
 
-readProcessInterleaved :: (ListLikeIOPlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
+readProcessChunks :: ListLikeIOPlus a c => CreateProcess -> a -> IO [Chunk a]
+readProcessChunks = readProcessInterleaved
+
+readProcessInterleaved :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => CreateProcess -> a -> IO b
 readProcessInterleaved p input = mask $ \ restore -> do
-    hs@(Just inh, Just outh, Just errh, pid) <-
+    (Just inh, Just outh, Just errh, pid) <-
         createProcess (p {std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe})
     onException
-      (restore $ readProcessChunks input hs)
+      (restore $ (<>) <$> pure (pidf pid)
+                      <*> do hSetBinaryMode inh True
+                             hSetBinaryMode outh True
+                             hSetBinaryMode errh True
+                             elements pid (chunks input, Just inh, Just outh, Just errh, Nothing))
       (do hPutStrLn stderr "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)
-
--- | Take a tuple like that returned by 'runInteractiveProcess',
--- create a process, send the list of inputs to its stdin and return
--- the lazy list of 'Output' objects.
-readProcessChunks :: forall a b c. (ListLikeIOPlus a c, ProcessOutput a b) => a -> Process -> IO b
-readProcessChunks input (mb_inh, mb_outh, mb_errh, pid) =
-    (<>) <$> pure (pidf pid)
-         <*> do maybe (return ()) (`hSetBinaryMode` True) mb_inh
-                maybe (return ()) (`hSetBinaryMode` True) mb_outh
-                maybe (return ()) (`hSetBinaryMode` True) mb_errh
-                elements (chunks input, mb_inh, mb_outh, mb_errh, Nothing)
     where
-      elements :: ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b) -> IO b
+      elements :: ProcessHandle -> ([a], Maybe Handle, Maybe Handle, Maybe Handle, Maybe b) -> IO b
       -- EOF on both output descriptors, get exit code.  It can be
       -- argued that the list will always contain exactly one exit
       -- code if traversed to its end, because the only case of
       -- elements that does not recurse is the one that adds a Result,
       -- and nowhere else is a Result added.  However, the process
       -- doing the traversing might die before that end is reached.
-      elements (_, _, Nothing, Nothing, elems) =
+      elements pid (_, _, Nothing, Nothing, elems) =
           do result <- waitForProcess pid
              -- Note that there is no need to insert the result code
              -- at the end of the list.
              return $ codef result <> maybe mempty id elems
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements tl@(_, _, _, _, Nothing) = ready uSecs tl >>= elements
+      elements pid tl@(_, _, _, _, Nothing) = ready uSecs tl >>= elements pid
       -- Add some output to the result value
-      elements (input, inh, outh, errh, Just elems) =
+      elements pid (input, inh, outh, errh, Just elems) =
           (<>) <$> pure elems
-               <*> unsafeInterleaveIO (elements (input, inh, outh, errh, Nothing))
+               <*> unsafeInterleaveIO (elements pid (input, inh, outh, errh, Nothing))
 
 -- A quick fix for the issue where hWaitForInput has actually started
 -- raising the isEOFError exception in ghc 6.10.
