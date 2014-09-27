@@ -5,7 +5,7 @@ module System.Process.ListLike.Class
     , showCmdSpecForUser
     ) where
 
-import Control.Exception (AsyncException)
+import Control.Exception (SomeException)
 import Data.ListLike (ListLikeIO(..))
 import Data.ListLike.Text.Text ()
 import Data.ListLike.Text.TextLazy ()
@@ -20,7 +20,7 @@ class Monoid b => ProcessOutput a b | b -> a where
     pidf :: ProcessHandle -> b
     outf :: a -> b
     errf :: a -> b
-    intf :: Either AsyncException IOError -> b
+    intf :: SomeException -> b
     codef :: ExitCode -> b
 
 -- | A process should have one 'ExitCode' at the end, this monoid lets

@@ -46,7 +46,7 @@ module System.Process.ListLike.Chunks
 
 import Control.Applicative ((<$>), (<*>))
 import Control.DeepSeq (NFData)
-import Control.Exception (AsyncException)
+import Control.Exception (SomeException)
 import Control.Monad (void)
 import Control.Monad.State (StateT, evalStateT, evalState, get, put)
 import Control.Monad.Trans (lift)
@@ -68,7 +68,7 @@ data Chunk a
     = ProcessHandle ProcessHandle -- ^ This will always come first
     | Stdout a
     | Stderr a
-    | Exception (Either AsyncException IOError)
+    | Exception SomeException
     | Result ExitCode
     deriving Show
 
@@ -97,7 +97,7 @@ readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
 readProcessChunks p input = readProcessInterleaved p input
 
 -- Deprecated - use ProcessOutput instances instead
-foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> (ExitCode -> b) -> Chunk a -> b
+foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (SomeException -> b) -> (ExitCode -> b) -> Chunk a -> b
 foldChunk f _ _ _ _ (ProcessHandle x) = f x
 foldChunk _ f _ _ _ (Stdout x) = f x
 foldChunk _ _ f _ _ (Stderr x) = f x
@@ -305,7 +305,7 @@ withProcessResult f input =
 -- | withProcessException f input applies f to the exceptions it finds
 -- in the input stream, replacing the Exception chunk with the return
 -- value of f.  Or, f itself might throw an exception.
-withProcessException :: (ListLike a c, Monad m) => (Either AsyncException IOError -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
+withProcessException :: (ListLike a c, Monad m) => (SomeException -> m (Chunk a)) -> [Chunk a] -> m [Chunk a]
 withProcessException f input =
     mapM (foldChunk
             (return . ProcessHandle)

@@ -85,7 +85,7 @@ readInterleaved' pairs finish res = do
       takeMore openCount (Right x) =
           do xs <- unsafeInterleaveIO $ takeChunks openCount
              return (x <> xs)
-      takeChunk = takeMVar res `catch` (\ (e :: AsyncException) -> return $ Right $ intf (Left e))
+      takeChunk = takeMVar res `catch` (\ (e :: SomeException) -> return $ Right $ intf e)
 
 -- | An implementation of 'System.Process.readProcessWithExitCode'
 -- with a two generalizations: (1) The input and outputs can be any
