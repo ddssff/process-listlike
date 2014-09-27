@@ -87,7 +87,7 @@ readProcessInterleaved start p input = mask $ \ restore -> do
 
     onException
       (restore $ (<>) <$> pure (pidf pid)
-                      <*> elements pid (chunks input, Just inh, [(outf, outh), (errf, errh)], Nothing))
+                      <*> (unsafeInterleaveIO $ elements pid (chunks input, Just inh, [(outf, outh), (errf, errh)], Nothing)))
       (do ePutStrLn "endProcess"
           hClose inh; hClose outh; hClose errh;
           terminateProcess pid; waitForProcess pid)
@@ -106,11 +106,11 @@ readProcessInterleaved start p input = mask $ \ restore -> do
              return $ codef result <> maybe mempty id elems
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements pid tl@(_, _, _, Nothing) = ready uSecs tl >>= elements pid
+      elements pid tl@(_, _, _, Nothing) = ready uSecs tl >>= unsafeInterleaveIO . elements pid
       -- Add some output to the result value
       elements pid (input, inh, pairs, Just elems) =
           (<>) <$> pure elems
-               <*> unsafeInterleaveIO (elements pid (input, inh, pairs, Nothing))
+               <*> (unsafeInterleaveIO $ elements pid (input, inh, pairs, Nothing))
 
 -- A quick fix for the issue where hWaitForInput has actually started
 -- raising the isEOFError exception in ghc 6.10.
