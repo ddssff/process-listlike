@@ -28,7 +28,7 @@ main = do
                    [ "runners: " ] ++
                    map (\ (n, (runner, _)) -> " " ++ show n ++ ". " ++ runner) (zip ([1..] :: [Int]) runners))
     Just (test, (s, runner)) ->
-        do ePutStrLn (test ++ " -> " ++ s)
+        do hPutStrLn stderr (test ++ " -> " ++ s)
            runner (shell test)
     where
       readArgs :: [String] -> Maybe (String, (String, CreateProcess -> IO ()))
@@ -49,14 +49,14 @@ tests = [ "ls -l /tmp"
 runners  :: [(String, CreateProcess -> IO ())]
 runners = [ ("Ready.readProcessInterleaved Lazy.Text",
              \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
-                    mapM_ (ePutStrLn . show) b)
+                    mapM_ (hPutStrLn stderr . show) b)
           , ("Ready.readProcessInterleaved Lazy.ByteString",
              \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
-                    mapM_ (ePutStrLn . show) b)
+                    mapM_ (hPutStrLn stderr . show) b)
           , ("Thread.readProcessInterleaved Lazy.Text",
              \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
-                    mapM_ (ePutStrLn . show) b)
+                    mapM_ (hPutStrLn stderr . show) b)
           , ("Thread.readProcessInterleaved Lazy.ByteString",
              \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
-                    mapM_ (ePutStrLn . show) b)
+                    mapM_ (hPutStrLn stderr . show) b)
           ]
