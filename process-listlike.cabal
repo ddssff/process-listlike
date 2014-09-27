@@ -1,5 +1,5 @@
 Name:               process-listlike
-Version:            1.2
+Version:            1.2.1
 Synopsis:           Enhanced version of process-extras
 Description:        Extra functionality for the Process library <http://hackage.haskell.org/package/process>.
   This is a drop-in replacement for <http://hackage.haskell.org/package/process-extras>,

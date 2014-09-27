@@ -1,3 +1,9 @@
+haskell-process-listlike (1.2.1) unstable; urgency=low
+
+  * Add a ProcessOutput instance for (ExitCode, [Chunk a]).
+
+ -- David Fox <dsf@seereason.com>  Sat, 27 Sep 2014 07:17:19 -0700
+
 haskell-process-listlike (1.2) unstable; urgency=low
 
   * Add the old non-threaded code for interleaved reading in
