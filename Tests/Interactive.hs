@@ -20,9 +20,6 @@ main :: IO ()
 main = do
   args <- getArgs
   case readArgs args of
-    Just (test, (s, runner)) ->
-        do hPutStrLn stderr (test ++ " -> " ++ s)
-           runner (shell test)
     Nothing ->
         hPutStrLn stderr $
           unlines ([ "usage: interactive-tests test# runner#"
@@ -30,6 +27,9 @@ main = do
                    map (\ (n, test) -> " " ++ show n ++ ". " ++ test) (zip ([1..] :: [Int]) tests) ++
                    [ "runners: " ] ++
                    map (\ (n, (runner, _)) -> " " ++ show n ++ ". " ++ runner) (zip ([1..] :: [Int]) runners))
+    Just (test, (s, runner)) ->
+        do ePutStrLn (test ++ " -> " ++ s)
+           runner (shell test)
     where
       readArgs :: [String] -> Maybe (String, (String, CreateProcess -> IO ()))
       readArgs [t, r] =
@@ -49,16 +49,16 @@ tests = [ "ls -l /tmp"
 runners  :: [(String, CreateProcess -> IO ())]
 runners = [ ("Ready.readProcessInterleaved Lazy.Text",
              \ p -> Ready.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
-                    mapM_ (hPutStrLn stderr . show) b)
+                    mapM_ (ePutStrLn . show) b)
           , ("Ready.readProcessInterleaved Lazy.ByteString",
              \ p -> Ready.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
-                    mapM_ (hPutStrLn stderr . show) b)
+                    mapM_ (ePutStrLn . show) b)
           , ("Thread.readProcessInterleaved Lazy.Text",
              \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
-                    mapM_ (hPutStrLn stderr . show) b)
+                    mapM_ (ePutStrLn . show) b)
           , ("Thread.readProcessInterleaved Lazy.ByteString",
              \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
-                    mapM_ (hPutStrLn stderr . show) b)
+                    mapM_ (ePutStrLn . show) b)
           ]
 
 st :: ProcessHandle -> IO ()
