@@ -73,11 +73,18 @@ data Chunk a
     deriving Show
 
 instance ListLikePlus a c => ProcessOutput a [Chunk a] where
-    pidf = (: []) . ProcessHandle
-    outf = (: []) . Stdout
-    errf = (: []) . Stderr
-    intf = (: []) . Exception
-    codef = (: []) . Result
+    pidf p = [ProcessHandle p]
+    outf x = [Stdout x]
+    errf x = [Stderr x]
+    intf e = [Exception e]
+    codef c = [Result c]
+
+instance ListLikePlus a c => ProcessOutput a (ExitCode, [Chunk a]) where
+    pidf _ = mempty
+    codef c = (c, mempty)
+    outf x = (mempty, [Stdout x])
+    errf x = (mempty, [Stderr x])
+    intf _ = mempty
 
 -- | This lets us use DeepSeq's 'Control.DeepSeq.force' on the stream
 -- of data returned by 'readProcessChunks'.
