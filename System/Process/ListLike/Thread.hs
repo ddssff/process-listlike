@@ -43,7 +43,8 @@ readProcessInterleaved  start p input = mask $ \ restore -> do
 
   onException
     (restore $
-     do waitOut <- forkWait $ (<>) <$> pure (pidf pid)
+     do waitOut <- forkWait $ unsafeInterleaveIO $
+                              (<>) <$> pure (pidf pid)
                                    <*> unsafeInterleaveIO (readInterleaved [(outf, outh), (errf, errh)] (codef <$> waitForProcess pid))
         writeInput inh input
         waitOut)
