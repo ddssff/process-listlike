@@ -94,7 +94,7 @@ instance NFData ExitCode
 -- containing chunks of process output, any exceptions that get thrown
 -- (unimplemented), and finally an exit code.
 readProcessChunks :: (ListLikePlus a c) => CreateProcess -> a -> IO [Chunk a]
-readProcessChunks p input = readProcessInterleaved (\ _pid -> return ()) p input
+readProcessChunks p input = readProcessInterleaved p input
 
 -- Deprecated - use ProcessOutput instances instead
 foldChunk :: (ProcessHandle -> b) -> (a -> b) -> (a -> b) -> (Either AsyncException IOError -> b) -> (ExitCode -> b) -> Chunk a -> b

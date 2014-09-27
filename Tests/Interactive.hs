@@ -48,18 +48,15 @@ tests = [ "ls -l /tmp"
 
 runners  :: [(String, CreateProcess -> IO ())]
 runners = [ ("Ready.readProcessInterleaved Lazy.Text",
-             \ p -> Ready.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
+             \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
                     mapM_ (ePutStrLn . show) b)
           , ("Ready.readProcessInterleaved Lazy.ByteString",
-             \ p -> Ready.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
+             \ p -> Ready.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
                     mapM_ (ePutStrLn . show) b)
           , ("Thread.readProcessInterleaved Lazy.Text",
-             \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
+             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.Text.Lazy.Text]) ->
                     mapM_ (ePutStrLn . show) b)
           , ("Thread.readProcessInterleaved Lazy.ByteString",
-             \ p -> Thread.readProcessInterleaved st p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
+             \ p -> Thread.readProcessInterleaved p mempty >>= \ (b :: [Chunk Data.ByteString.Lazy.ByteString]) ->
                     mapM_ (ePutStrLn . show) b)
           ]
-
-st :: ProcessHandle -> IO ()
-st pid = ePutStrLn ("pid=" ++ show pid)
