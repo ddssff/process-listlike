@@ -16,7 +16,7 @@ module System.Process.ListLike.Ready
 
 import Control.Applicative ((<$>), (<*>), pure)
 import Control.Concurrent (threadDelay)
-import Control.Exception (catch, mask, onException)
+import Control.Exception (catch, mask, onException, try)
 import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
 import Data.Maybe (mapMaybe)
 import Data.Monoid (Monoid(mempty), (<>), mconcat)
@@ -98,14 +98,18 @@ readProcessInterleaved p input = mask $ \ restore -> do
       -- elements that does not recurse is the one that adds a Result,
       -- and nowhere else is a Result added.  However, the process
       -- doing the traversing might die before that end is reached.
-      elements pid (_, _, [], elems) =
-          do result <- waitForProcess pid
-             -- Note that there is no need to insert the result code
-             -- at the end of the list.
-             return $ codef result <> maybe mempty id elems
+      elements pid tuple@(_, _, [], elems) =
+          do result <- try (waitForProcess pid)
+             case result of
+               Left exn -> (<>) <$> pure (maybe mempty id elems <> intf exn) <*> elements pid tuple
+               Right code -> pure (maybe mempty id elems <> codef code)
       -- The available output has been processed, send input and read
       -- from the ready handles
-      elements pid tl@(_, _, _, Nothing) = ready uSecs tl >>= unsafeInterleaveIO . elements pid
+      elements pid tuple@(_, _, _, Nothing) =
+          do result <- try (ready uSecs tuple)
+             case result of
+               Left exn -> (<>) <$> pure (intf exn) <*> elements pid tuple
+               Right tuple' -> elements pid tuple'
       -- Add some output to the result value
       elements pid (input, inh, pairs, Just elems) =
           (<>) <$> pure elems
