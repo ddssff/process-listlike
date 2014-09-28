@@ -1,3 +1,11 @@
+haskell-process-listlike (1.3) unstable; urgency=low
+
+  * Fix the issue where the ProcessHandle chunk wasn't appearing
+    for processes that produced no output.  As a result, we no longer
+    need the (ProcessHandle -> IO ()) argument to readProcessInterleaved.
+
+ -- David Fox <dsf@seereason.com>  Sun, 28 Sep 2014 08:11:30 -0700
+
 haskell-process-listlike (1.2.1) unstable; urgency=low
 
   * Add a ProcessOutput instance for (ExitCode, [Chunk a]).
