@@ -21,14 +21,13 @@ import Data.ListLike (ListLike(length, null), ListLikeIO(hGetNonBlocking))
 import Data.Maybe (mapMaybe)
 import Data.Monoid (Monoid(mempty), (<>), mconcat)
 import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.IO as LT
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import Debug.Console (ePutStrLn)
 import qualified GHC.IO.Exception as E
 import Prelude hiding (length, null)
 import System.Exit (ExitCode)
 import System.Process (ProcessHandle, CreateProcess(..), waitForProcess, shell, proc, createProcess, StdStream(CreatePipe), terminateProcess)
-import System.IO (Handle, hSetBinaryMode, hReady, hClose, hSetBuffering, BufferMode(LineBuffering, BlockBuffering, NoBuffering))
+import System.IO (Handle, hReady, hClose)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import System.Process.ListLike.Chunks (Chunk(..))
 import System.Process.ListLike.Class (ProcessOutput(..), ListLikePlus(..))
@@ -37,9 +36,6 @@ import System.Process.ListLike.Instances ()
 -- For the ListLikeIOPlus instance
 import qualified Data.ByteString.Lazy as L
 import Data.Word (Word8)
-
--- For the test
-import System.IO (hPutStrLn, stderr)
 
 class ListLikePlus a c => ListLikeIOPlus a c where
     hPutNonBlocking :: Handle -> a -> IO a
@@ -84,6 +80,8 @@ readProcessInterleaved p input = mask $ \ restore -> do
 
     setModes input hs
 
+    -- The uses of unsafeInterleaveIO here and below are required to
+    -- keep the output from blocking waiting for process exit.
     onException
       (restore $ (<>) <$> pure (pidf pid)
                       <*> (unsafeInterleaveIO $ elements pid (chunks input, Just inh, [(outf, outh), (errf, errh)], Nothing)))
