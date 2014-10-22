@@ -1,3 +1,6 @@
+This repository has been integrated into https://github.com/ddssff/process-listlike, which
+is a fork of https://github.com/davidlazar/process-extras.
+
 process-listlike
 ================
 
